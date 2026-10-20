@@ -1,24 +1,23 @@
 from llm_model import get_model
 from state import ShoppingState
+from langgraph.types import interrupt
 
 def human_review(state: ShoppingState) -> dict:
-    evaluation = state['evaluation']
+    evaluation = state["current_item"]
 
-    print(evaluation.title)
-    print()
-    print(evaluation.reason)
-    print()
-    
-    print("Pros: ✅")
-    for argument in evaluation.pro_arguments:
-        print(argument)
+    human_readable_suggestion = f"""
+    Title: {evaluation.title}
+    Reason: {evaluation.reason}
 
-    print()
-    print("Cons: 🟨")
-    for argument in evaluation.con_arguments:
-        print(argument)
+    Pros: ✅
+    { "\n-".join(evaluation.pro_arguments) }
 
-    print()
-    print("So what do you think?")
-    feedback = input()
+    Cons: 🟨
+    { "\n-".join(evaluation.con_arguments) }
+
+    So what do you think?
+    """
+
+    feedback = interrupt(human_readable_suggestion)
+
     return {"human_feedback": feedback}
