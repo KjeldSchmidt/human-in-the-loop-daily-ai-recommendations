@@ -34,9 +34,12 @@ From Windows (repo root):
 # 1) Dedicated DBs on shared RDS (CREATE DATABASE — not table prefixes)
 wsl bash infrastructure/run-wsl.sh create-databases
 
+# 1b) Google OAuth into Secrets Manager (from web/.env); edit later in Console
+wsl bash infrastructure/run-wsl.sh upsert-google-oauth
+
 # 2) Tfvars
 cp infrastructure/env/dev/terraform.tfvars.example infrastructure/env/dev/terraform.tfvars
-# fill google_client_id / google_client_secret; leave enable_apprunner = false
+# leave enable_apprunner = false
 
 # 3) ECR + Secrets Manager app secret (no App Runner yet)
 wsl bash infrastructure/run-wsl.sh apply dev
@@ -71,14 +74,31 @@ Remote state: `s3://tck-labs-tfstate-6fd94603/signalfold.dev.tfstate`
 
 ## App URL
 
-After App Runner is up:
-
 ```bash
 wsl bash infrastructure/run-wsl.sh outputs dev
 # prints APP_URL=https://….awsapprunner.com
 ```
 
-GitHub Actions: [`.github/workflows/infra-status.yml`](../.github/workflows/infra-status.yml) writes the same URL into the job summary / a `::notice` (needs repo secret `AWS_ROLE_ARN` for OIDC).
+## Google OAuth (AWS Secrets Manager, not GitHub)
+
+Secret name: `signalfold/dev/google-oauth`  
+Keys: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`  
+Managed in the AWS Console (or seed once from `web/.env`):
+
+```bash
+wsl bash infrastructure/run-wsl.sh upsert-google-oauth
+```
+
+Terraform only **reads** this secret; it does not own the value.
+
+## GitHub Actions deploy (lexloop-style)
+
+Workflow: [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
+
+- Assumes `${{ secrets.AWS_ROLE_ARN }}` via OIDC
+- Runs `fmt-check` / `lint`, applies Terraform, builds/pushes the image, enables App Runner, posts **App URL** as a job summary + `::notice`
+
+**Repo secret:** `AWS_ROLE_ARN` only (Google stays in AWS Secrets Manager).
 
 ## Local vs AWS DB
 

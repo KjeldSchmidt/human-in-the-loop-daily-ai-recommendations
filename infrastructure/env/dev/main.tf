@@ -29,14 +29,12 @@ provider "aws" {
 module "web" {
   source = "../../modules/apprunner_web"
 
-  project              = "signalfold"
-  environment          = "dev"
-  db_name              = "signalfold_dev"
-  image_tag            = var.image_tag
-  google_client_id     = var.google_client_id
-  google_client_secret = var.google_client_secret
-  public_hostname      = var.public_hostname
-  enable_apprunner     = var.enable_apprunner
+  project          = "signalfold"
+  environment      = "dev"
+  db_name          = "signalfold_dev"
+  image_tag        = var.image_tag
+  public_hostname  = var.public_hostname
+  enable_apprunner = var.enable_apprunner
 }
 
 output "ecr_repository_url" {
@@ -53,6 +51,10 @@ output "service_arn" {
 
 output "app_secret_name" {
   value = module.web.app_secret_name
+}
+
+output "google_oauth_secret_name" {
+  value = module.web.google_oauth_secret_name
 }
 
 output "db_name" {

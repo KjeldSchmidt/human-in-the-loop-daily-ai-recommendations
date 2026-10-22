@@ -1,0 +1,108 @@
+# Lexloop-style deploy: OIDC via AWS_ROLE_ARN secret + terraform + image push + App URL notice.
+name: Deploy Infra
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infrastructure/**"
+      - "web/**"
+      - ".github/workflows/deploy-infra.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  deploy-dev:
+    name: Deploy Dev
+    runs-on: ubuntu-latest
+    outputs:
+      app_url: ${{ steps.urls.outputs.app_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.3"
+          terraform_wrapper: false
+
+      - name: Check infra format
+        run: ./infrastructure/do fmt-check
+
+      - name: Lint infra
+        run: ./infrastructure/do lint
+
+      # Phase 1: ECR + app secret (Google OAuth lives in signalfold/dev/google-oauth — console-managed)
+      - name: Apply infra (ECR + secrets)
+        working-directory: infrastructure/env/dev
+        run: |
+          terraform init -reconfigure -input=false
+          terraform apply -auto-approve -input=false \
+            -var="enable_apprunner=false"
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          IMAGE_TAG: latest
+        run: |
+          REPO="$(cd infrastructure/env/dev && terraform output -raw ecr_repository_url)"
+          docker build -t "${REPO}:${IMAGE_TAG}" web/
+          docker push "${REPO}:${IMAGE_TAG}"
+          echo "Pushed ${REPO}:${IMAGE_TAG}"
+
+      - name: Apply infra (enable App Runner)
+        working-directory: infrastructure/env/dev
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="enable_apprunner=true"
+
+      - name: Start App Runner deployment
+        working-directory: infrastructure/env/dev
+        run: |
+          ARN="$(terraform output -raw service_arn 2>/dev/null || true)"
+          if [ -n "$ARN" ] && [ "$ARN" != "null" ]; then
+            aws apprunner start-deployment --service-arn "$ARN"
+          fi
+
+      - name: Set public_hostname from service URL
+        working-directory: infrastructure/env/dev
+        run: |
+          URL="$(terraform output -raw service_url)"
+          HOST="${URL#https://}"
+          terraform apply -auto-approve -input=false \
+            -var="enable_apprunner=true" \
+            -var="public_hostname=${HOST}"
+
+      - name: Publish App URL
+        id: urls
+        working-directory: infrastructure/env/dev
+        run: |
+          URL="$(terraform output -raw service_url)"
+          echo "app_url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Signalfold App Runner"
+            echo ""
+            echo "**App URL:** $URL"
+            echo ""
+            echo '```'
+            terraform output
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=App Runner URL::$URL"
+          echo "APP_URL=$URL"

@@ -13,6 +13,14 @@ function task_fmt_check {
   terraform fmt -recursive -check .
 }
 
+## lint: init + validate modules / env
+function task_lint {
+  pushd modules/apprunner_web >/dev/null
+  terraform init -reconfigure -backend=false >/dev/null
+  terraform validate
+  popd >/dev/null
+}
+
 ## plan: terraform plan for env (default: dev)
 function task_plan {
   local env=${1:-dev}
@@ -28,6 +36,15 @@ function task_apply {
   pushd "env/$env" >/dev/null
   terraform init -reconfigure
   terraform apply
+  popd >/dev/null
+}
+
+## apply-auto: terraform apply -auto-approve (CI/CD)
+function task_apply_auto {
+  local env=${1:-dev}
+  pushd "env/$env" >/dev/null
+  terraform init -reconfigure
+  terraform apply -auto-approve
   popd >/dev/null
 }
 
@@ -53,6 +70,11 @@ function task_outputs {
 ## create-databases: CREATE DATABASE signalfold_dev / signalfold_prod on shared RDS
 function task_create_databases {
   bash "$ROOT/scripts/create_databases.sh"
+}
+
+## upsert-google-oauth: put GOOGLE_* from web/.env into Secrets Manager (console-managed thereafter)
+function task_upsert_google_oauth {
+  python3 "$ROOT/scripts/upsert_google_oauth_secret.py"
 }
 
 ## push-image: build and push web image to ECR (requires prior apply for repo)

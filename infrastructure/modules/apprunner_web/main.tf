@@ -44,6 +44,8 @@ locals {
   allowed_hosts = var.public_hostname != "" ? var.public_hostname : ".awsapprunner.com"
   csrf_origins  = var.public_hostname != "" ? "https://${var.public_hostname}" : ""
   site_domain   = var.public_hostname != "" ? var.public_hostname : "localhost"
+
+  google_oauth_secret_name = var.google_oauth_secret_name != "" ? var.google_oauth_secret_name : "${var.project}/${var.environment}/google-oauth"
 }
 
 resource "random_password" "django_secret" {
@@ -79,9 +81,13 @@ resource "aws_ecr_lifecycle_policy" "app" {
   })
 }
 
+data "aws_secretsmanager_secret" "google_oauth" {
+  name = local.google_oauth_secret_name
+}
+
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${var.project}/${var.environment}/app"
-  description             = "Signalfold App Runner runtime secrets"
+  description             = "Signalfold App Runner runtime secrets (SECRET_KEY, DATABASE_URL)"
   recovery_window_in_days = 0
   tags                    = local.tags
 }
@@ -89,10 +95,8 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    SECRET_KEY           = random_password.django_secret.result
-    DATABASE_URL         = local.database_url
-    GOOGLE_CLIENT_ID     = var.google_client_id
-    GOOGLE_CLIENT_SECRET = var.google_client_secret
+    SECRET_KEY   = random_password.django_secret.result
+    DATABASE_URL = local.database_url
   })
 }
 
@@ -139,7 +143,10 @@ data "aws_iam_policy_document" "apprunner_secrets" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret",
     ]
-    resources = [aws_secretsmanager_secret.app.arn]
+    resources = [
+      aws_secretsmanager_secret.app.arn,
+      data.aws_secretsmanager_secret.google_oauth.arn,
+    ]
   }
 }
 
@@ -189,8 +196,8 @@ resource "aws_apprunner_service" "web" {
         runtime_environment_secrets = {
           SECRET_KEY           = "${aws_secretsmanager_secret.app.arn}:SECRET_KEY::"
           DATABASE_URL         = "${aws_secretsmanager_secret.app.arn}:DATABASE_URL::"
-          GOOGLE_CLIENT_ID     = "${aws_secretsmanager_secret.app.arn}:GOOGLE_CLIENT_ID::"
-          GOOGLE_CLIENT_SECRET = "${aws_secretsmanager_secret.app.arn}:GOOGLE_CLIENT_SECRET::"
+          GOOGLE_CLIENT_ID     = "${data.aws_secretsmanager_secret.google_oauth.arn}:GOOGLE_CLIENT_ID::"
+          GOOGLE_CLIENT_SECRET = "${data.aws_secretsmanager_secret.google_oauth.arn}:GOOGLE_CLIENT_SECRET::"
         }
       }
     }

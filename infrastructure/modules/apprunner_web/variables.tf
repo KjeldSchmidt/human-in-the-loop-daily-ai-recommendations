@@ -28,14 +28,10 @@ variable "db_name" {
   description = "Postgres database name on the shared RDS host (e.g. signalfold_dev)"
 }
 
-variable "google_client_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "google_client_secret" {
-  type      = string
-  sensitive = true
+variable "google_oauth_secret_name" {
+  type        = string
+  default     = ""
+  description = "Secrets Manager secret with GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. Managed in AWS Console, not Terraform."
 }
 
 variable "cpu" {

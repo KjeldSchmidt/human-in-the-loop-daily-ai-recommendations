@@ -26,6 +26,10 @@ output "app_secret_name" {
   value = aws_secretsmanager_secret.app.name
 }
 
+output "google_oauth_secret_name" {
+  value = data.aws_secretsmanager_secret.google_oauth.name
+}
+
 output "db_name" {
   value = var.db_name
 }
