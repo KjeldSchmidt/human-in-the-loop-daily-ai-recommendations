@@ -1,0 +1,8 @@
+google_client_id     = "....apps.googleusercontent.com"
+google_client_secret = "...."
+image_tag            = "latest"
+enable_apprunner     = false
+# After ECR exists + image pushed:
+# enable_apprunner   = true
+# After service is up: terraform output -raw service_url → strip https://
+# public_hostname    = "xxxxx.eu-central-1.awsapprunner.com"

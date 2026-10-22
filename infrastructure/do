@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+
+## fmt: terraform fmt
+function task_fmt {
+  terraform fmt -recursive .
+}
+
+## fmt-check: check formatting
+function task_fmt_check {
+  terraform fmt -recursive -check .
+}
+
+## plan: terraform plan for env (default: dev)
+function task_plan {
+  local env=${1:-dev}
+  pushd "env/$env" >/dev/null
+  terraform init -reconfigure
+  terraform plan
+  popd >/dev/null
+}
+
+## apply: terraform apply for env (default: dev)
+function task_apply {
+  local env=${1:-dev}
+  pushd "env/$env" >/dev/null
+  terraform init -reconfigure
+  terraform apply
+  popd >/dev/null
+}
+
+## outputs: show outputs for env (prints APP_URL when App Runner is enabled)
+function task_outputs {
+  local env=${1:-dev}
+  pushd "env/$env" >/dev/null
+  terraform init -reconfigure >/dev/null
+  terraform output
+  local url
+  url="$(terraform output -raw service_url 2>/dev/null || true)"
+  if [[ -n "$url" && "$url" != "null" ]]; then
+    echo ""
+    echo "APP_URL=${url}"
+    echo "Open: ${url}"
+  else
+    echo ""
+    echo "APP_URL=(not deployed — set enable_apprunner=true and apply after push-image)"
+  fi
+  popd >/dev/null
+}
+
+## create-databases: CREATE DATABASE signalfold_dev / signalfold_prod on shared RDS
+function task_create_databases {
+  bash "$ROOT/scripts/create_databases.sh"
+}
+
+## push-image: build and push web image to ECR (requires prior apply for repo)
+function task_push_image {
+  bash "$ROOT/scripts/push_image.sh"
+}
+
+## help: list tasks
+function task_help {
+  grep -E '^## ' "$0" | sed 's/^## /  /'
+}
+
+TASK="${1:-help}"
+shift || true
+"task_${TASK//-/_}" "$@"

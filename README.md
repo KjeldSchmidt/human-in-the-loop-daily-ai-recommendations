@@ -1,16 +1,24 @@
-# LangChain Bike Shopper
+# Signalfold / LangChain news aggregator
 
-A recommendation pipeline that scores incoming items against a user’s preferences, surfaces the strongest matches for human review, and folds that feedback back into the preference model.
+A personal news aggregator: subscribe to RSS feeds, pre-filter a daily brief against your taste, give relevance feedback, and answer short follow-up questions. The **web UI** is a Django app; the **AI/LangGraph core** lives under `runner/` and is developed separately.
 
-## Architecture overview
+## Repository layout
 
-The system is built as a **LangGraph** state machine, with **LangChain** handling LLM calls. Each run moves through a fixed sequence of steps: ingest data, load preferences, evaluate and rank candidates, pause for human review when warranted, then update preferences and continue with the next candidate.
+| Path | Role |
+|------|------|
+| [`web/`](web/) | Django + UV frontend MVP (placeholder ranking) |
+| [`runner/`](runner/) | Hand-written LangGraph / Bedrock core — keep separate |
+| [`infrastructure/`](infrastructure/) | AWS App Runner + ECR; DBs on shared tck-labs RDS |
+
+## Architecture overview (AI core)
+
+The recommendation pipeline is a **LangGraph** state machine with **LangChain** LLM calls on **Amazon Bedrock**. Runs evaluate candidates against preferences, pause for human review, then fold feedback back into taste. Observability uses LangGraph event streaming. Daily candidate input is designed as an event-driven batch into a per-user inbox.
 
 ```
-Daily data ──► Check / load data
+Feeds / events ──► Inbox batch
                       │
                       ▼
-              Fetch user preferences
+              Fetch preferences
                       │
                       ▼
               Evaluate & rank (LLM)
@@ -21,34 +29,32 @@ Daily data ──► Check / load data
             (below bar)   (worth showing)
                  │            │
                  ▼            ▼
-               Done     Human review
+               Done     Human review / follow-ups
                               │
                               ▼
                     Update preferences
-                              │
-                              └──► next item
 ```
 
-### Orchestration (LangGraph)
+## Web MVP
 
-LangGraph owns the control flow: nodes for data loading, preference lookup, evaluation, item selection, human-in-the-loop review, and preference updates. Conditional edges decide whether to keep presenting items or end the run. Durable checkpoints keep runs resumable across interrupts (for example while waiting on human feedback).
+Clickable product shell with **placeholder AI**:
 
-### Models (LangChain + AWS Bedrock)
+- Google sign-in (django-allauth; no end-user passwords)
+- Curated feed catalog, recommendations, custom RSS URL
+- Daily brief with relevance feedback (relevant / not / skip)
+- Taste follow-up questions
 
-All generative work goes through LangChain chat models backed by **Amazon Bedrock** (Converse API). Structured outputs drive evaluation results—relevance, ranking scores, and short rationales—so downstream steps can rank and filter without ad-hoc parsing.
+See [`web/README.md`](web/README.md) for local run and Google OAuth.
 
-### Preferences & learning loop
+```bash
+cd web
+cp .env.example .env   # add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+just sync
+just setup
+just run
+```
 
-User preferences are stored and retrieved via a memory service keyed by user. Before evaluation, the graph pulls preferences relevant to the current batch. After human review, feedback is written back so later runs better reflect taste.
+## Hosting (AWS)
 
-### Human-in-the-loop
-
-When an item clears the enjoyment threshold, the graph interrupts and presents a concise recommendation (rationale, pros, cons). The user’s response resumes the graph and feeds preference updates.
-
-### Observability & evaluation (LangGraph)
-
-Runs are executed with LangGraph’s event streaming so each node transition and interrupt is observable end-to-end. That same event surface supports tracing, inspection of intermediate state, and evaluation of how recommendations and human feedback evolve across a run—without treating the pipeline as a black box.
-
-### Event-driven daily data input
-
-New candidate items arrive on a **daily event-driven schedule**: an upstream process emits a batch of listings (or equivalent catalog updates) each day. Those events trigger a graph run for the target user(s), so evaluation and review stay aligned with fresh inventory rather than a static dataset.
+- **Compute:** App Runner (container from ECR) — see [`infrastructure/README.md`](infrastructure/README.md)
+- **Database:** dedicated Postgres DBs `signalfold_dev` / `signalfold_prod` on the shared [tck-labs-base](../tck-labs-base) RDS host (not Render)

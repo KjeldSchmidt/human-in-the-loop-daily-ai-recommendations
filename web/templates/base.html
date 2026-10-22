@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Brief{% endblock %} · Signalfold</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% if user.is_authenticated %}{% url 'brief' %}{% else %}{% url 'landing' %}{% endif %}">Signalfold</a>
+    {% if user.is_authenticated %}
+    <nav class="nav">
+      <a href="{% url 'brief' %}" {% if request.resolver_match.url_name == 'brief' %}class="active"{% endif %}>Brief</a>
+      <a href="{% url 'feeds' %}" {% if request.resolver_match.url_name == 'feeds' %}class="active"{% endif %}>Feeds</a>
+      <a href="{% url 'followups' %}" {% if request.resolver_match.url_name == 'followups' or request.resolver_match.url_name == 'answer_followup' %}class="active"{% endif %}>Taste</a>
+      <form class="inline" method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="linkish">Log out</button>
+      </form>
+    </nav>
+    {% endif %}
+  </header>
+
+  {% if messages %}
+  <ul class="flash">
+    {% for message in messages %}
+    <li class="{{ message.tags }}">{{ message }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

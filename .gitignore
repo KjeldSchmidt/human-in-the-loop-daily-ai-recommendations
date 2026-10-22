@@ -1,1 +1,19 @@
 .env
+*.pyc
+__pycache__/
+.venv/
+venv/
+web/.venv/
+web/db.sqlite3
+web/staticfiles/
+*.egg-info/
+.DS_Store
+runner/langgraph.db
+
+# Terraform
+infrastructure/**/.terraform/
+infrastructure/**/*.tfstate
+infrastructure/**/*.tfstate.*
+infrastructure/**/terraform.tfvars
+infrastructure/**/*.tfvars
+!infrastructure/**/terraform.tfvars.example

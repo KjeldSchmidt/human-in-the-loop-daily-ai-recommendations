@@ -1,0 +1,54 @@
+# Signalfold web — run `just` to list recipes
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+# List available recipes (default)
+default:
+    @just --list
+
+# Install / sync Python deps with uv
+sync:
+    uv sync
+
+# Apply database migrations
+migrate:
+    uv run python manage.py migrate
+
+# Create new migrations from model changes
+makemigrations *args:
+    uv run python manage.py makemigrations {{args}}
+
+# Seed curated feeds, demo articles, and taste questions
+seed:
+    uv run python manage.py seed_demo
+
+# migrate + seed
+setup: migrate seed
+
+# Run the development server (http://127.0.0.1:8000)
+run host="127.0.0.1:8000":
+    uv run python manage.py runserver {{host}}
+
+# Django shell
+shell:
+    uv run python manage.py shell
+
+# System checks
+check:
+    uv run python manage.py check
+
+# Create a Django admin superuser (ops only; product auth is Google)
+createsuperuser:
+    uv run python manage.py createsuperuser
+
+# Collect static files (WhiteNoise / deploy)
+collectstatic:
+    uv run python manage.py collectstatic --noinput
+
+# Pass-through: `just manage <cmd> ...` → manage.py
+manage *args:
+    uv run python manage.py {{args}}
+
+# --- AWS (from repo root via WSL) ---
+# wsl bash ../infrastructure/run-wsl.sh create-databases
+# wsl bash ../infrastructure/run-wsl.sh apply dev
+# wsl bash ../infrastructure/run-wsl.sh push-image
