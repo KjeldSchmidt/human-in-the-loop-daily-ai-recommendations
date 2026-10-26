@@ -12,11 +12,11 @@ fmt:
 fmt-check:
     terraform fmt -recursive -check .
 
-# Init + validate the App Runner module
+# Init + validate the Lambda web module
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd modules/apprunner_web >/dev/null
+    pushd modules/lambda_web >/dev/null
     terraform init -reconfigure -backend=false >/dev/null
     terraform validate
     popd >/dev/null
@@ -48,7 +48,7 @@ apply-auto env="dev":
     terraform apply -auto-approve
     popd >/dev/null
 
-# Show outputs; prints APP_URL when App Runner is enabled
+# Show outputs; prints APP_URL when Lambda Function URL is enabled
 outputs env="dev":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,7 +62,7 @@ outputs env="dev":
       echo "Open: ${url}"
     else
       echo ""
-      echo "APP_URL=(not deployed — set enable_apprunner=true and apply after push-image)"
+      echo "APP_URL=(not deployed — set enable_lambda=true and apply after push-image)"
     fi
     popd >/dev/null
 

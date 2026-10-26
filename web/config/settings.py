@@ -79,10 +79,12 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 _default_db = f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
 _db_url = os.environ.get("DATABASE_URL", _default_db)
+# Lambda: no persistent connections across freezes; local/long-lived: reuse.
+_conn_max_age = 0 if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") else 600
 DATABASES = {
     "default": dj_database_url.parse(
         _db_url,
-        conn_max_age=600,
+        conn_max_age=_conn_max_age,
         ssl_require=_db_url.startswith("postgres")
         and os.environ.get("DATABASE_SSL", "true").lower()
         in ("1", "true", "yes"),

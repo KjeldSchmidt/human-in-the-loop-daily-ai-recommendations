@@ -1,4 +1,4 @@
-# Lexloop-style deploy: OIDC via AWS_ROLE_ARN secret + terraform + image push + App URL notice.
+# OIDC via AWS_ROLE_ARN secret + terraform + image push + Function URL notice.
 name: Deploy Infra
 
 on:
@@ -56,43 +56,58 @@ jobs:
         run: |
           terraform init -reconfigure -input=false
           terraform apply -auto-approve -input=false \
-            -var="enable_apprunner=false"
+            -var="enable_lambda=false"
 
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push image
+        id: image
         env:
-          IMAGE_TAG: latest
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           REPO="$(cd infrastructure/env/dev && terraform output -raw ecr_repository_url)"
-          docker build -t "${REPO}:${IMAGE_TAG}" web/
+          docker build -t "${REPO}:${IMAGE_TAG}" -t "${REPO}:latest" web/
           docker push "${REPO}:${IMAGE_TAG}"
+          docker push "${REPO}:latest"
+          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "Pushed ${REPO}:${IMAGE_TAG}"
 
-      - name: Apply infra (enable App Runner)
+      - name: Apply infra (enable Lambda)
         working-directory: infrastructure/env/dev
         run: |
           terraform apply -auto-approve -input=false \
-            -var="enable_apprunner=true"
+            -var="enable_lambda=true" \
+            -var="image_tag=${{ steps.image.outputs.tag }}"
 
-      - name: Start App Runner deployment
-        working-directory: infrastructure/env/dev
-        run: |
-          ARN="$(terraform output -raw service_arn 2>/dev/null || true)"
-          if [ -n "$ARN" ] && [ "$ARN" != "null" ]; then
-            aws apprunner start-deployment --service-arn "$ARN"
-          fi
-
-      - name: Set public_hostname from service URL
+      - name: Set public_hostname from Function URL
         working-directory: infrastructure/env/dev
         run: |
           URL="$(terraform output -raw service_url)"
           HOST="${URL#https://}"
+          HOST="${HOST%/}"
           terraform apply -auto-approve -input=false \
-            -var="enable_apprunner=true" \
+            -var="enable_lambda=true" \
+            -var="image_tag=${{ steps.image.outputs.tag }}" \
             -var="public_hostname=${HOST}"
+
+      - name: Migrate and seed via Lambda invoke
+        working-directory: infrastructure/env/dev
+        run: |
+          FN="$(terraform output -raw function_name)"
+          aws lambda invoke \
+            --function-name "$FN" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"manage":["migrate","--noinput"]}' \
+            /tmp/migrate-out.json
+          cat /tmp/migrate-out.json
+          aws lambda invoke \
+            --function-name "$FN" \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{"manage":["seed_demo"]}' \
+            /tmp/seed-out.json
+          cat /tmp/seed-out.json
 
       - name: Publish App URL
         id: urls
@@ -101,7 +116,7 @@ jobs:
           URL="$(terraform output -raw service_url)"
           echo "app_url=$URL" >> "$GITHUB_OUTPUT"
           {
-            echo "### noise-to-signal App Runner"
+            echo "### noise-to-signal Lambda"
             echo ""
             echo "**App URL:** $URL"
             echo ""
@@ -109,5 +124,5 @@ jobs:
             terraform output
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice title=App Runner URL::$URL"
+          echo "::notice title=Function URL::$URL"
           echo "APP_URL=$URL"

@@ -27,14 +27,14 @@ provider "aws" {
 }
 
 module "web" {
-  source = "../../modules/apprunner_web"
+  source = "../../modules/lambda_web"
 
-  project          = "noise-to-signal"
-  environment      = "dev"
-  db_name          = "noise_to_signal_dev"
-  image_tag        = var.image_tag
-  public_hostname  = var.public_hostname
-  enable_apprunner = var.enable_apprunner
+  project         = "noise-to-signal"
+  environment     = "dev"
+  db_name         = "noise_to_signal_dev"
+  image_tag       = var.image_tag
+  public_hostname = var.public_hostname
+  enable_lambda   = var.enable_lambda
 }
 
 output "ecr_repository_url" {
@@ -45,8 +45,12 @@ output "service_url" {
   value = module.web.service_url
 }
 
-output "service_arn" {
-  value = module.web.service_arn
+output "function_name" {
+  value = module.web.function_name
+}
+
+output "function_arn" {
+  value = module.web.function_arn
 }
 
 output "app_secret_name" {

@@ -8,7 +8,7 @@ A personal news aggregator: subscribe to RSS feeds, pre-filter a daily brief aga
 |------|------|
 | [`web/`](web/) | Django + UV frontend MVP (placeholder ranking) |
 | [`runner/`](runner/) | Hand-written LangGraph / Bedrock core — keep separate |
-| [`infrastructure/`](infrastructure/) | AWS App Runner + ECR; DBs on shared tck-labs RDS |
+| [`infrastructure/`](infrastructure/) | Lambda + Function URL + ECR; DBs on shared tck-labs RDS |
 
 ## Architecture overview (AI core)
 
@@ -56,5 +56,5 @@ just run
 
 ## Hosting (AWS)
 
-- **Compute:** App Runner (container from ECR) — see [`infrastructure/README.md`](infrastructure/README.md)
+- **Compute:** Lambda container image + Function URL (scale to zero) — see [`infrastructure/README.md`](infrastructure/README.md)
 - **Database:** dedicated Postgres DBs `noise_to_signal_dev` / `noise_to_signal_prod` on the shared [tck-labs-base](../tck-labs-base) RDS host (not Render)

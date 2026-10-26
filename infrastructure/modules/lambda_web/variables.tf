@@ -15,7 +15,7 @@ variable "aws_region" {
 variable "image_tag" {
   type        = string
   default     = "latest"
-  description = "ECR image tag for the App Runner service"
+  description = "ECR image tag for the Lambda function"
 }
 
 variable "shared_rds_secret_name" {
@@ -34,39 +34,25 @@ variable "google_oauth_secret_name" {
   description = "Secrets Manager secret with GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. Managed in AWS Console, not Terraform."
 }
 
-variable "cpu" {
-  type    = string
-  default = "256"
-}
-
-variable "memory" {
-  type    = string
-  default = "512"
-}
-
-variable "max_concurrency" {
-  type    = number
-  default = 100
-}
-
-variable "min_size" {
+variable "memory_size" {
   type        = number
-  default     = 1
-  description = "App Runner MinSize is at least 1 (memory billed when idle; CPU only when active)"
+  default     = 1024
+  description = "Lambda memory (MB)"
 }
 
-variable "max_size" {
-  type    = number
-  default = 3
+variable "timeout" {
+  type        = number
+  default     = 30
+  description = "Lambda timeout (seconds)"
 }
 
 variable "public_hostname" {
   type        = string
   default     = ""
-  description = "App Runner hostname without scheme (from service_url). Set on a second apply for CSRF/SITE_DOMAIN."
+  description = "Function URL hostname without scheme. Set on a second apply for CSRF/SITE_DOMAIN."
 }
 
-variable "enable_apprunner" {
+variable "enable_lambda" {
   type        = bool
   default     = false
   description = "Set true after the first image has been pushed to ECR."

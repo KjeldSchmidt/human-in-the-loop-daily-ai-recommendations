@@ -9,11 +9,11 @@ Auth is **Google-only** (django-allauth). Django still has a `User` row per pers
 1. In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials), create an **OAuth 2.0 Client ID** of type **Web application**.
 2. Authorized JavaScript origins:
    - Local: `http://127.0.0.1:8000`
-   - AWS App Runner: `https://<service-id>.eu-central-1.awsapprunner.com`
+   - AWS Lambda Function URL: `https://<id>.lambda-url.eu-central-1.on.aws`
 3. Authorized redirect URIs (exact):
    - Local: `http://127.0.0.1:8000/accounts/google/login/callback/`
-   - AWS: `https://<service-id>.eu-central-1.awsapprunner.com/accounts/google/login/callback/`
-4. Put the client ID and secret in **`web/.env`** (local) or Terraform `terraform.tfvars` / Secrets Manager (AWS):
+   - AWS: `https://<id>.lambda-url.eu-central-1.on.aws/accounts/google/login/callback/`
+4. Put the client ID and secret in **`web/.env`** (local) or Secrets Manager (AWS):
 
 ```
 GOOGLE_CLIENT_ID=....apps.googleusercontent.com
@@ -28,8 +28,8 @@ Also set `SITE_DOMAIN` to match the host (no scheme):
 
 ```
 SITE_DOMAIN=127.0.0.1:8000
-# App Runner:
-SITE_DOMAIN=xxxxx.eu-central-1.awsapprunner.com
+# Lambda Function URL:
+SITE_DOMAIN=xxxxxxxx.lambda-url.eu-central-1.on.aws
 ```
 
 ## Local development
@@ -53,21 +53,20 @@ DATABASE_URL=postgresql://tckadmin:…@tck-labs-shared.cjmwyu84sg6w.eu-central-1
 DATABASE_SSL=true
 ```
 
-## Deploy on AWS (App Runner + shared RDS)
+## Deploy on AWS (Lambda container + shared RDS)
 
 See [`../infrastructure/README.md`](../infrastructure/README.md).
 
 Summary:
 
 1. `cd infrastructure && just create-databases` → `CREATE DATABASE noise_to_signal_dev` / `noise_to_signal_prod`
-2. Terraform apply with `enable_apprunner=false` → ECR + app secret
-3. `push-image` → Docker build/push
-4. Terraform apply with `enable_apprunner=true`
-5. Set `public_hostname` from `service_url`; update Google OAuth redirects
-
-Container entrypoint runs `migrate` + `seed_demo` then Gunicorn on `$PORT` (8000 for App Runner).
+2. Terraform apply with `enable_lambda=false` → ECR + app secret
+3. `push-image` → Docker build/push (Lambda Python 3.12 + Mangum)
+4. Terraform apply with `enable_lambda=true`
+5. Set `public_hostname` from Function URL; update Google OAuth redirects
+6. `aws lambda invoke` with `{"manage":["migrate","--noinput"]}` (and seed) — not on every cold start
 
 ### Caveats
 
 - Seeded articles are demo content until real RSS ingestion lands.
-- App Runner MinSize is 1 (idle memory cost); closed to some new AWS accounts — see infra README.
+- Cold starts are expected; idle compute cost is ~$0.

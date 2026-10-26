@@ -6,16 +6,17 @@ output "ecr_repository_name" {
   value = aws_ecr_repository.app.name
 }
 
-output "service_arn" {
-  value = try(aws_apprunner_service.web[0].arn, null)
+output "function_name" {
+  value = try(aws_lambda_function.web[0].function_name, null)
+}
+
+output "function_arn" {
+  value = try(aws_lambda_function.web[0].arn, null)
 }
 
 output "service_url" {
-  value = try(aws_apprunner_service.web[0].service_url, null)
-}
-
-output "service_id" {
-  value = try(aws_apprunner_service.web[0].service_id, null)
+  description = "Public HTTPS Function URL (trailing slash)"
+  value       = try(aws_lambda_function_url.web[0].function_url, null)
 }
 
 output "app_secret_arn" {

@@ -1,5 +1,4 @@
 #!/bin/sh
+# Local/container HTTP only (not used by Lambda — migrates run via lambda invoke).
 set -e
-uv run python manage.py migrate --noinput
-uv run python manage.py seed_demo
 exec uv run gunicorn config.wsgi:application --bind "0.0.0.0:${PORT:-8000}"

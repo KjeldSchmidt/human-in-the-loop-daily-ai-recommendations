@@ -1,11 +1,12 @@
 # noise-to-signal infrastructure (AWS)
 
-Host Django on **App Runner** + **ECR**, with a **dedicated Postgres database** on the shared [tck-labs-base](../../tck-labs-base) RDS instance.
+Host Django on **Lambda (container image) + Function URL** + **ECR**, with a **dedicated Postgres database** on the shared [tck-labs-base](../../tck-labs-base) RDS instance.
 
-## Important AWS notes
+## Cost model
 
-- **App Runner is closed to new AWS customers** (as of AWS announcements recommending ECS Express Mode). If `terraform apply` fails creating an App Runner service, this account cannot use App Runner — switch compute later; ECR + Secrets + DB scripts still apply.
-- App Runner **MinSize ≥ 1**: you pay for **memory** of one provisioned instance when idle; CPU is billed when handling requests. This is not Cloud Run–style absolute $0 compute.
+- **Scale to zero:** no always-on compute or load balancer. Idle cost is essentially shared RDS + Secrets Manager.
+- Cold starts are a few seconds (acceptable for personal / low traffic).
+- Lambda talks to RDS over the public endpoint (no VPC / NAT fixed cost).
 
 ## Isolation model
 
@@ -25,7 +26,7 @@ Not table prefixes. Not schemas-as-isolation. Bootstrap DB `tcklabs` is never us
 - Shared RDS already applied via tck-labs-base
 - Docker (for image push)
 - `psql` client (for `create-databases`)
-- Google OAuth web client (callback will be the App Runner URL)
+- Google OAuth web client (callback will be the Lambda Function URL)
 
 ```bash
 cd infrastructure
@@ -47,21 +48,27 @@ just upsert-google-oauth
 
 # 2) Tfvars
 cp env/dev/terraform.tfvars.example env/dev/terraform.tfvars
-# leave enable_apprunner = false
+# leave enable_lambda = false
 
-# 3) ECR + Secrets Manager app secret (no App Runner yet)
+# 3) ECR + Secrets Manager app secret (no Lambda yet)
 just apply
 
 # 4) Build/push image
 just push-image
 
-# 5) Enable App Runner
-# set enable_apprunner = true in terraform.tfvars
+# 5) Enable Lambda + Function URL
+# set enable_lambda = true in terraform.tfvars
 just apply
 
-# 6) CSRF / Site
-# terraform output -raw service_url → strip https:// into public_hostname
+# 6) CSRF / Site — strip https:// and trailing / from service_url into public_hostname
 just apply
+
+# 7) Migrate / seed (not on every cold start)
+FN=$(cd env/dev && terraform output -raw function_name)
+aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
+  --payload '{"manage":["migrate","--noinput"]}' /tmp/migrate.json
+aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
+  --payload '{"manage":["seed_demo"]}' /tmp/seed.json
 ```
 
 Google Cloud Console — add:
@@ -74,7 +81,7 @@ Google Cloud Console — add:
 | Path | Role |
 |------|------|
 | [`justfile`](justfile) | Infra recipes (`fmt-check`, `apply`, `outputs`, …) |
-| [`modules/apprunner_web`](modules/apprunner_web) | ECR, Secrets Manager app secret, App Runner, IAM |
+| [`modules/lambda_web`](modules/lambda_web) | ECR, Secrets Manager app secret, Lambda + Function URL, IAM |
 | [`env/dev`](env/dev) | Dev wiring → DB `noise_to_signal_dev` |
 | [`scripts/create_databases.sh`](scripts/create_databases.sh) | `CREATE DATABASE` on shared RDS |
 | [`scripts/push_image.sh`](scripts/push_image.sh) | `docker build` + ECR push |
@@ -85,7 +92,7 @@ Remote state: `s3://tck-labs-tfstate-6fd94603/noise-to-signal.dev.tfstate`
 
 ```bash
 cd infrastructure && just outputs
-# prints APP_URL=https://….awsapprunner.com
+# prints APP_URL=https://….lambda-url.eu-central-1.on.aws/
 ```
 
 ## Google OAuth (AWS Secrets Manager, not GitHub)
@@ -98,14 +105,14 @@ Managed in the AWS Console (or seed once from `web/.env`):
 cd infrastructure && just upsert-google-oauth
 ```
 
-Terraform only **reads** this secret; it does not own the value.
+Terraform **reads** this secret into Lambda env; it does not own the value lifecycle.
 
-## GitHub Actions deploy (lexloop-style)
+## GitHub Actions deploy
 
 Workflow: [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
 
 - Assumes `${{ secrets.AWS_ROLE_ARN }}` via OIDC
-- Runs `just fmt-check` / `just lint`, applies Terraform, builds/pushes the image, enables App Runner, posts **App URL** as a job summary + `::notice`
+- Runs `just fmt-check` / `just lint`, applies Terraform, builds/pushes the image, enables Lambda, sets `public_hostname`, invokes migrate/seed, posts **App URL** as a job summary + `::notice`
 
 **Repo secret:** `AWS_ROLE_ARN` only (Google stays in AWS Secrets Manager).
 
