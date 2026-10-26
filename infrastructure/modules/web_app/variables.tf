@@ -46,3 +46,18 @@ variable "timeout" {
   type    = number
   default = 30
 }
+
+variable "public_hostname" {
+  type        = string
+  description = "Custom hostname for this env (e.g. beta.signal-to-noise.fyi)"
+}
+
+variable "hosted_zone_id" {
+  type        = string
+  description = "Route 53 zone id from the shared DNS stack"
+}
+
+variable "acm_certificate_arn" {
+  type        = string
+  description = "us-east-1 ACM certificate ARN (wildcard) from the shared DNS stack"
+}

@@ -37,11 +37,14 @@ data "terraform_remote_state" "shared" {
 module "web" {
   source = "../../../modules/web_app"
 
-  project            = "noise-to-signal"
-  environment        = "dev"
-  db_name            = "noise_to_signal_dev"
-  ecr_repository_url = data.terraform_remote_state.shared.outputs.ecr_repository_url
-  image_tag          = var.image_tag
+  project             = "noise-to-signal"
+  environment         = "dev"
+  db_name             = "noise_to_signal_dev"
+  ecr_repository_url  = data.terraform_remote_state.shared.outputs.ecr_repository_url
+  image_tag           = var.image_tag
+  public_hostname     = "beta.signal-to-noise.fyi"
+  hosted_zone_id      = data.terraform_remote_state.shared.outputs.route53_zone_id
+  acm_certificate_arn = data.terraform_remote_state.shared.outputs.acm_certificate_arn
 }
 
 variable "image_tag" {
@@ -71,6 +74,10 @@ output "function_arn" {
 
 output "cloudfront_domain_name" {
   value = module.web.cloudfront_domain_name
+}
+
+output "public_hostname" {
+  value = "beta.signal-to-noise.fyi"
 }
 
 output "app_secret_name" {

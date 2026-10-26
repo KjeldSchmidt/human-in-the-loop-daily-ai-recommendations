@@ -136,7 +136,13 @@ resource "aws_lambda_function" "web" {
       DEBUG        = "false"
       DATABASE_SSL = "true"
       # Host comes from CloudFront via X-Forwarded-Host (see cloudfront_function).
-      ALLOWED_HOSTS        = ".cloudfront.net,.lambda-url.${var.aws_region}.on.aws"
+      ALLOWED_HOSTS = join(",", [
+        var.public_hostname,
+        ".signal-to-noise.fyi",
+        ".cloudfront.net",
+        ".lambda-url.${var.aws_region}.on.aws",
+      ])
+      SITE_DOMAIN          = var.public_hostname
       SECRET_KEY           = local.app_secret.SECRET_KEY
       DATABASE_URL         = local.app_secret.DATABASE_URL
       GOOGLE_CLIENT_ID     = local.google_oauth.GOOGLE_CLIENT_ID
@@ -195,6 +201,7 @@ resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   is_ipv6_enabled     = true
   comment             = local.name_prefix
+  aliases             = [var.public_hostname]
   default_root_object = ""
   price_class         = "PriceClass_100"
   wait_for_deployment = true
@@ -216,9 +223,9 @@ resource "aws_cloudfront_distribution" "web" {
     target_origin_id       = "lambda-function-url"
     viewer_protocol_policy = "redirect-to-https"
 
-    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
+    compress        = true
 
     cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
@@ -236,6 +243,32 @@ resource "aws_cloudfront_distribution" "web" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn      = var.acm_certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+}
+
+resource "aws_route53_record" "app_a" {
+  zone_id = var.hosted_zone_id
+  name    = var.public_hostname
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.web.domain_name
+    zone_id                = aws_cloudfront_distribution.web.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "app_aaaa" {
+  zone_id = var.hosted_zone_id
+  name    = var.public_hostname
+  type    = "AAAA"
+
+  alias {
+    name                   = aws_cloudfront_distribution.web.domain_name
+    zone_id                = aws_cloudfront_distribution.web.hosted_zone_id
+    evaluate_target_health = false
   }
 }

@@ -12,8 +12,8 @@ output "function_url" {
 }
 
 output "service_url" {
-  description = "Public HTTPS CloudFront URL (stable; use for Google OAuth)"
-  value       = "https://${aws_cloudfront_distribution.web.domain_name}/"
+  description = "Public HTTPS URL (custom domain; use for Google OAuth)"
+  value       = "https://${var.public_hostname}/"
 }
 
 output "cloudfront_domain_name" {

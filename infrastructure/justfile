@@ -1,8 +1,8 @@
 # noise-to-signal infra — run `just` (from this directory) to list recipes
 #
 # Terraform stacks (full applies, no -target lists):
-#   env/shared     — ECR (one repo for the account; tags separate envs)
-#   env/<env>/app  — Lambda + Function URL + CloudFront
+#   env/shared     — ECR + Route53 zone + ACM (shared across envs)
+#   env/<env>/app  — Lambda + Function URL + CloudFront + DNS alias
 
 default:
     @just --list
@@ -16,14 +16,16 @@ fmt-check:
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
-    for m in ecr web_app; do
-      pushd "modules/${m}" >/dev/null
+    # Validate stack roots (modules with provider aliases need a root context)
+    for root in env/shared modules/ecr modules/web_app; do
+      pushd "$root" >/dev/null
       terraform init -reconfigure -backend=false >/dev/null
       terraform validate
       popd >/dev/null
     done
 
-# Shared ECR (once per account; safe to re-run)
+# Shared ECR + DNS (once per account; safe to re-run)
+# After apply: just name-servers → set NS at the registrar
 apply-shared:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -64,6 +66,16 @@ deploy tag="latest" env="dev":
     DEPLOY_ENV={{env}} just push-image "{{tag}}"
     just apply-app "{{tag}}" "{{env}}"
     just setup-remote "{{env}}"
+
+# Print Route 53 name servers (delegate signal-to-noise.fyi at the registrar)
+name-servers:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd env/shared >/dev/null
+    terraform init -reconfigure >/dev/null
+    echo "Delegate signal-to-noise.fyi to these name servers:"
+    terraform output -json name_servers | python3 -c 'import json,sys; [print(f"  {ns}") for ns in json.load(sys.stdin)]'
+    popd >/dev/null
 
 outputs env="dev":
     #!/usr/bin/env bash

@@ -6,10 +6,10 @@ Django on **Lambda (container image) → Function URL → CloudFront**, image in
 
 | Stack | Path | State key | Contains |
 |-------|------|-----------|----------|
-| **shared** | [`env/shared`](env/shared) | `noise-to-signal.shared.tfstate` | One ECR repo (`noise-to-signal`) for all envs |
-| **app (dev)** | [`env/dev/app`](env/dev/app) | `noise-to-signal.dev.app.tfstate` | secrets, IAM, Lambda, Function URL, CloudFront |
+| **shared** | [`env/shared`](env/shared) | `noise-to-signal.shared.tfstate` | ECR + Route 53 (`signal-to-noise.fyi`) + ACM wildcard |
+| **app (dev)** | [`env/dev/app`](env/dev/app) | `noise-to-signal.dev.app.tfstate` | Lambda, Function URL, CloudFront, `beta.signal-to-noise.fyi` |
 
-Environments share the ECR; distinguish releases with **image tags** (git sha / `latest`). A future `env/prod/app` would use the same shared state.
+Environments share ECR + DNS; distinguish releases with **image tags**. Dev public URL: **https://beta.signal-to-noise.fyi/**
 
 Deploy order: **shared → push image → app**.
 
@@ -42,15 +42,17 @@ just
 ```bash
 just create-databases
 just upsert-google-oauth
+just apply-shared
+just name-servers          # → set NS at the registrar for signal-to-noise.fyi
 just deploy                 # or: just deploy "$GIT_SHA"
-
-# Steps: apply-shared → push-image → apply-app → setup-remote
 ```
 
-Google OAuth (host from `just outputs` → `APP_URL`):
+ACM DNS validation only works after the registrar points at those name servers (or you copy the validation CNAMEs manually). `apply-shared` waits on certificate validation.
 
-- Origin: `https://dxxxx.cloudfront.net`
-- Redirect: `https://dxxxx.cloudfront.net/accounts/google/login/callback/`
+Google OAuth:
+
+- Origin: `https://beta.signal-to-noise.fyi`
+- Redirect: `https://beta.signal-to-noise.fyi/accounts/google/login/callback/`
 
 ## Layout
 
@@ -58,9 +60,10 @@ Google OAuth (host from `just outputs` → `APP_URL`):
 |------|------|
 | [`justfile`](justfile) | `apply-shared`, `apply-app`, `deploy`, … |
 | [`modules/ecr`](modules/ecr) | Shared ECR |
-| [`modules/web_app`](modules/web_app) | Per-env compute + secrets |
+| [`modules/dns`](modules/dns) | Route 53 zone + ACM (us-east-1) |
+| [`modules/web_app`](modules/web_app) | Per-env compute + CloudFront alias |
 | [`env/shared`](env/shared) | Shared stack root |
-| [`env/dev/app`](env/dev/app) | Dev app stack root |
+| [`env/dev/app`](env/dev/app) | Dev app → `beta.signal-to-noise.fyi` |
 
 ## GitHub Actions
 
