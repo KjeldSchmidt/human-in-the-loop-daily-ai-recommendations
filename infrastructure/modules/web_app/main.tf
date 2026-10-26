@@ -133,12 +133,12 @@ resource "aws_lambda_function" "web" {
 
   environment {
     variables = {
-      DEBUG         = "false"
-      DATABASE_SSL  = "true"
+      DEBUG        = "false"
+      DATABASE_SSL = "true"
       # Host comes from CloudFront via X-Forwarded-Host (see cloudfront_function).
-      ALLOWED_HOSTS = ".cloudfront.net,.lambda-url.${var.aws_region}.on.aws"
-      SECRET_KEY    = local.app_secret.SECRET_KEY
-      DATABASE_URL  = local.app_secret.DATABASE_URL
+      ALLOWED_HOSTS        = ".cloudfront.net,.lambda-url.${var.aws_region}.on.aws"
+      SECRET_KEY           = local.app_secret.SECRET_KEY
+      DATABASE_URL         = local.app_secret.DATABASE_URL
       GOOGLE_CLIENT_ID     = local.google_oauth.GOOGLE_CLIENT_ID
       GOOGLE_CLIENT_SECRET = local.google_oauth.GOOGLE_CLIENT_SECRET
     }
