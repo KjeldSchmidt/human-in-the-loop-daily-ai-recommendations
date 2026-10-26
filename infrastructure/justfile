@@ -145,11 +145,15 @@ setup-remote env="dev":
 # Build and push web image to ECR (requires prior apply for repo).
 # Also tags :latest when tag != latest. Local: set AWS_PROFILE for ECR login.
 # CI: run after amazon-ecr-login (no AWS_PROFILE needed).
-push-image env="dev" tag="latest":
+# Usage: just push-image
+#        just push-image "$GITHUB_SHA"
+#        DEPLOY_ENV=dev just push-image my-tag
+push-image tag="latest":
     #!/usr/bin/env bash
     set -euo pipefail
+    env="${DEPLOY_ENV:-dev}"
     root="$(cd "{{justfile_directory()}}/.." && pwd)"
-    tf_dir="{{justfile_directory()}}/env/{{env}}"
+    tf_dir="{{justfile_directory()}}/env/${env}"
     aws_region="${AWS_REGION:-eu-central-1}"
     repo="$(cd "$tf_dir" && terraform output -raw ecr_repository_url)"
 

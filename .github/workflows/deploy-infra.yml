@@ -68,7 +68,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          just push-image tag="${IMAGE_TAG}"
+          just push-image "${IMAGE_TAG}"
           echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Apply infra (enable Lambda)
