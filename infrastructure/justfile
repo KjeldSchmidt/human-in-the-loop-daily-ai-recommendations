@@ -68,12 +68,116 @@ outputs env="dev":
 
 # CREATE DATABASE noise_to_signal_dev / noise_to_signal_prod on shared RDS
 create-databases:
-    bash scripts/create_databases.sh
+    #!/usr/bin/env bash
+    set -euo pipefail
+    AWS_PROFILE="${AWS_PROFILE:-AdministratorAccess-465836752303}"
+    SECRET_ID="${SECRET_ID:-tck-labs/shared/rds}"
+    DATABASES=("noise_to_signal_dev" "noise_to_signal_prod")
+
+    echo "Fetching credentials from Secrets Manager (${SECRET_ID})..."
+    SECRET_JSON="$(aws secretsmanager get-secret-value \
+      --profile "$AWS_PROFILE" \
+      --region eu-central-1 \
+      --secret-id "$SECRET_ID" \
+      --query SecretString \
+      --output text)"
+    export SECRET_JSON
+
+    HOST="$(python3 -c 'import json,os; print(json.loads(os.environ["SECRET_JSON"])["host"])')"
+    PORT="$(python3 -c 'import json,os; print(json.loads(os.environ["SECRET_JSON"])["port"])')"
+    USER="$(python3 -c 'import json,os; print(json.loads(os.environ["SECRET_JSON"])["username"])')"
+    PASS="$(python3 -c 'import json,os; print(json.loads(os.environ["SECRET_JSON"])["password"])')"
+
+    if ! command -v psql >/dev/null 2>&1; then
+      echo "psql not found. Install PostgreSQL client, then re-run."
+      echo "Or connect manually as tckadmin and run:"
+      for db in "${DATABASES[@]}"; do
+        echo "  CREATE DATABASE ${db};"
+      done
+      exit 1
+    fi
+
+    export PGPASSWORD="$PASS"
+    CONN="host=${HOST} port=${PORT} user=${USER} dbname=tcklabs sslmode=require"
+
+    for db in "${DATABASES[@]}"; do
+      exists="$(psql "$CONN" -tAc "SELECT 1 FROM pg_database WHERE datname='${db}'")"
+      if [[ "$exists" == "1" ]]; then
+        echo "Database ${db} already exists — skip"
+      else
+        echo "Creating database ${db}..."
+        psql "$CONN" -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${db};"
+        echo "Created ${db}"
+      fi
+    done
+
+    echo "Done. App DATABASE_URL path must be /noise_to_signal_dev or /noise_to_signal_prod."
 
 # Put GOOGLE_* from web/.env into Secrets Manager (console-managed thereafter)
 upsert-google-oauth:
     python3 scripts/upsert_google_oauth_secret.py
 
-# Build and push web image to ECR (requires prior apply for repo)
-push-image:
-    bash scripts/push_image.sh
+# Invoke a Django manage command on the deployed Lambda (not on cold start).
+# Example: just manage migrate --noinput
+# Example: DEPLOY_ENV=dev just manage seed_demo
+manage *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    env="${DEPLOY_ENV:-dev}"
+    tf_dir="{{justfile_directory()}}/env/${env}"
+    fn="$(cd "$tf_dir" && terraform output -raw function_name)"
+    payload="$(python3 -c 'import json,sys; print(json.dumps({"manage": sys.argv[1:]}))' {{args}})"
+    out="$(mktemp)"
+    aws lambda invoke \
+      --function-name "$fn" \
+      --cli-binary-format raw-in-base64-out \
+      --payload "$payload" \
+      "$out"
+    cat "$out"
+    echo
+    rm -f "$out"
+
+# migrate + seed on deployed Lambda
+setup-remote env="dev":
+    DEPLOY_ENV={{env}} just manage migrate --noinput
+    DEPLOY_ENV={{env}} just manage seed_demo
+
+# Build and push web image to ECR (requires prior apply for repo).
+# Also tags :latest when tag != latest. Local: set AWS_PROFILE for ECR login.
+# CI: run after amazon-ecr-login (no AWS_PROFILE needed).
+push-image env="dev" tag="latest":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(cd "{{justfile_directory()}}/.." && pwd)"
+    tf_dir="{{justfile_directory()}}/env/{{env}}"
+    aws_region="${AWS_REGION:-eu-central-1}"
+    repo="$(cd "$tf_dir" && terraform output -raw ecr_repository_url)"
+
+    if [[ -n "${AWS_PROFILE:-}" ]]; then
+      account_id="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text)"
+      echo "Logging in to ECR ${account_id} (${aws_region})..."
+      aws ecr get-login-password --profile "$AWS_PROFILE" --region "$aws_region" \
+        | docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${aws_region}.amazonaws.com"
+    fi
+
+    echo "Building ${repo}:{{tag}} from web/..."
+    # Lambda rejects BuildKit OCI provenance/SBOM attestation manifests
+    docker build \
+      --platform linux/amd64 \
+      --provenance=false \
+      --sbom=false \
+      -t "${repo}:{{tag}}" \
+      "$root/web"
+    docker push "${repo}:{{tag}}"
+
+    if [[ "{{tag}}" != "latest" ]]; then
+      docker tag "${repo}:{{tag}}" "${repo}:latest"
+      docker push "${repo}:latest"
+    fi
+
+    echo "Pushed ${repo}:{{tag}}"
+    fn="$(cd "$tf_dir" && terraform output -raw function_name 2>/dev/null || true)"
+    if [[ -n "$fn" && "$fn" != "null" ]]; then
+      echo "Update Lambda to this image:"
+      echo "  aws lambda update-function-code --function-name ${fn} --image-uri ${repo}:{{tag}}"
+    fi

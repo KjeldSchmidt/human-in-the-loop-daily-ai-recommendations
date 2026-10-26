@@ -64,15 +64,12 @@ jobs:
 
       - name: Build and push image
         id: image
+        working-directory: infrastructure
         env:
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          REPO="$(cd infrastructure/env/dev && terraform output -raw ecr_repository_url)"
-          docker build -t "${REPO}:${IMAGE_TAG}" -t "${REPO}:latest" web/
-          docker push "${REPO}:${IMAGE_TAG}"
-          docker push "${REPO}:latest"
+          just push-image tag="${IMAGE_TAG}"
           echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Pushed ${REPO}:${IMAGE_TAG}"
 
       - name: Apply infra (enable Lambda)
         working-directory: infrastructure/env/dev
@@ -93,21 +90,8 @@ jobs:
             -var="public_hostname=${HOST}"
 
       - name: Migrate and seed via Lambda invoke
-        working-directory: infrastructure/env/dev
-        run: |
-          FN="$(terraform output -raw function_name)"
-          aws lambda invoke \
-            --function-name "$FN" \
-            --cli-binary-format raw-in-base64-out \
-            --payload '{"manage":["migrate","--noinput"]}' \
-            /tmp/migrate-out.json
-          cat /tmp/migrate-out.json
-          aws lambda invoke \
-            --function-name "$FN" \
-            --cli-binary-format raw-in-base64-out \
-            --payload '{"manage":["seed_demo"]}' \
-            /tmp/seed-out.json
-          cat /tmp/seed-out.json
+        working-directory: infrastructure
+        run: just setup-remote
 
       - name: Publish App URL
         id: urls

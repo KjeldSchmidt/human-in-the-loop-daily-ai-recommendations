@@ -64,7 +64,7 @@ Summary:
 3. `push-image` → Docker build/push (Lambda Python 3.12 + Mangum)
 4. Terraform apply with `enable_lambda=true`
 5. Set `public_hostname` from Function URL; update Google OAuth redirects
-6. `aws lambda invoke` with `{"manage":["migrate","--noinput"]}` (and seed) — not on every cold start
+6. `cd infrastructure && just setup-remote` — migrate/seed via Lambda invoke (not on every cold start)
 
 ### Caveats
 

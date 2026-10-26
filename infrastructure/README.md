@@ -64,11 +64,7 @@ just apply
 just apply
 
 # 7) Migrate / seed (not on every cold start)
-FN=$(cd env/dev && terraform output -raw function_name)
-aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
-  --payload '{"manage":["migrate","--noinput"]}' /tmp/migrate.json
-aws lambda invoke --function-name "$FN" --cli-binary-format raw-in-base64-out \
-  --payload '{"manage":["seed_demo"]}' /tmp/seed.json
+just setup-remote
 ```
 
 Google Cloud Console — add:
@@ -83,8 +79,10 @@ Google Cloud Console — add:
 | [`justfile`](justfile) | Infra recipes (`fmt-check`, `apply`, `outputs`, …) |
 | [`modules/lambda_web`](modules/lambda_web) | ECR, Secrets Manager app secret, Lambda + Function URL, IAM |
 | [`env/dev`](env/dev) | Dev wiring → DB `noise_to_signal_dev` |
-| [`scripts/create_databases.sh`](scripts/create_databases.sh) | `CREATE DATABASE` on shared RDS |
-| [`scripts/push_image.sh`](scripts/push_image.sh) | `docker build` + ECR push |
+| `just create-databases` | `CREATE DATABASE` on shared RDS |
+| `just push-image` | `docker build` + ECR push (Lambda-safe flags) |
+| `just setup-remote` / `just manage …` | migrate/seed (or any manage cmd) via Lambda invoke |
+| [`scripts/upsert_google_oauth_secret.py`](scripts/upsert_google_oauth_secret.py) | seed Google OAuth secret from `web/.env` |
 
 Remote state: `s3://tck-labs-tfstate-6fd94603/noise-to-signal.dev.tfstate`
 
