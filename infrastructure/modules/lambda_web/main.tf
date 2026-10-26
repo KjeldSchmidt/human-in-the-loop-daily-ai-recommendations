@@ -48,8 +48,8 @@ locals {
 
   google_oauth_secret_name = var.google_oauth_secret_name != "" ? var.google_oauth_secret_name : "${var.project}/${var.environment}/google-oauth"
 
-  app_secret    = jsondecode(aws_secretsmanager_secret_version.app.secret_string)
-  google_oauth  = jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string)
+  app_secret   = jsondecode(aws_secretsmanager_secret_version.app.secret_string)
+  google_oauth = jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string)
 }
 
 resource "random_password" "django_secret" {
