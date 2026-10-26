@@ -1,0 +1,79 @@
+# noise-to-signal infra — run `just` (from this directory) to list recipes
+
+# List available recipes (default)
+default:
+    @just --list
+
+# terraform fmt
+fmt:
+    terraform fmt -recursive .
+
+# Check Terraform formatting
+fmt-check:
+    terraform fmt -recursive -check .
+
+# Init + validate the App Runner module
+lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd modules/apprunner_web >/dev/null
+    terraform init -reconfigure -backend=false >/dev/null
+    terraform validate
+    popd >/dev/null
+
+# terraform plan for env (default: dev)
+plan env="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd "env/{{env}}" >/dev/null
+    terraform init -reconfigure
+    terraform plan
+    popd >/dev/null
+
+# terraform apply for env (default: dev)
+apply env="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd "env/{{env}}" >/dev/null
+    terraform init -reconfigure
+    terraform apply
+    popd >/dev/null
+
+# terraform apply -auto-approve (CI/CD)
+apply-auto env="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd "env/{{env}}" >/dev/null
+    terraform init -reconfigure
+    terraform apply -auto-approve
+    popd >/dev/null
+
+# Show outputs; prints APP_URL when App Runner is enabled
+outputs env="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd "env/{{env}}" >/dev/null
+    terraform init -reconfigure >/dev/null
+    terraform output
+    url="$(terraform output -raw service_url 2>/dev/null || true)"
+    if [[ -n "$url" && "$url" != "null" ]]; then
+      echo ""
+      echo "APP_URL=${url}"
+      echo "Open: ${url}"
+    else
+      echo ""
+      echo "APP_URL=(not deployed — set enable_apprunner=true and apply after push-image)"
+    fi
+    popd >/dev/null
+
+# CREATE DATABASE noise_to_signal_dev / noise_to_signal_prod on shared RDS
+create-databases:
+    bash scripts/create_databases.sh
+
+# Put GOOGLE_* from web/.env into Secrets Manager (console-managed thereafter)
+upsert-google-oauth:
+    python3 scripts/upsert_google_oauth_secret.py
+
+# Build and push web image to ECR (requires prior apply for repo)
+push-image:
+    bash scripts/push_image.sh

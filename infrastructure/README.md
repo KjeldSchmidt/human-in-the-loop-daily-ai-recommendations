@@ -1,4 +1,4 @@
-# Signalfold infrastructure (AWS)
+# noise-to-signal infrastructure (AWS)
 
 Host Django on **App Runner** + **ECR**, with a **dedicated Postgres database** on the shared [tck-labs-base](../../tck-labs-base) RDS instance.
 
@@ -12,8 +12,8 @@ Host Django on **App Runner** + **ECR**, with a **dedicated Postgres database** 
 Same RDS **host**, separate Postgres **databases**:
 
 ```sql
-CREATE DATABASE signalfold_dev;
-CREATE DATABASE signalfold_prod;
+CREATE DATABASE noise_to_signal_dev;
+CREATE DATABASE noise_to_signal_prod;
 ```
 
 Not table prefixes. Not schemas-as-isolation. Bootstrap DB `tcklabs` is never used for app data.
@@ -21,39 +21,47 @@ Not table prefixes. Not schemas-as-isolation. Bootstrap DB `tcklabs` is never us
 ## Prerequisites
 
 - WSL + AWS SSO: `AWS_PROFILE=AdministratorAccess-465836752303`
+- [`just`](https://github.com/casey/just) (recipes in [`justfile`](justfile); `just` lists them)
 - Shared RDS already applied via tck-labs-base
 - Docker (for image push)
 - `psql` client (for `create-databases`)
 - Google OAuth web client (callback will be the App Runner URL)
 
+```bash
+cd infrastructure
+export AWS_PROFILE=AdministratorAccess-465836752303
+just   # list recipes
+```
+
 ## Deploy sequence
 
-From Windows (repo root):
-
 ```bash
+cd infrastructure
+export AWS_PROFILE=AdministratorAccess-465836752303
+
 # 1) Dedicated DBs on shared RDS (CREATE DATABASE — not table prefixes)
-wsl bash infrastructure/run-wsl.sh create-databases
+just create-databases
 
 # 1b) Google OAuth into Secrets Manager (from web/.env); edit later in Console
-wsl bash infrastructure/run-wsl.sh upsert-google-oauth
+just upsert-google-oauth
 
 # 2) Tfvars
-cp infrastructure/env/dev/terraform.tfvars.example infrastructure/env/dev/terraform.tfvars
+cp env/dev/terraform.tfvars.example env/dev/terraform.tfvars
 # leave enable_apprunner = false
 
 # 3) ECR + Secrets Manager app secret (no App Runner yet)
-wsl bash infrastructure/run-wsl.sh apply dev
+just apply
 
 # 4) Build/push image
-wsl bash infrastructure/run-wsl.sh push-image
+just push-image
 
 # 5) Enable App Runner
 # set enable_apprunner = true in terraform.tfvars
-wsl bash infrastructure/run-wsl.sh apply dev
+just apply
 
 # 6) CSRF / Site
 # terraform output -raw service_url → strip https:// into public_hostname
-wsl bash infrastructure/run-wsl.sh apply dev
+just apply
 ```
 
 Google Cloud Console — add:
@@ -65,28 +73,29 @@ Google Cloud Console — add:
 
 | Path | Role |
 |------|------|
+| [`justfile`](justfile) | Infra recipes (`fmt-check`, `apply`, `outputs`, …) |
 | [`modules/apprunner_web`](modules/apprunner_web) | ECR, Secrets Manager app secret, App Runner, IAM |
-| [`env/dev`](env/dev) | Dev wiring → DB `signalfold_dev` |
+| [`env/dev`](env/dev) | Dev wiring → DB `noise_to_signal_dev` |
 | [`scripts/create_databases.sh`](scripts/create_databases.sh) | `CREATE DATABASE` on shared RDS |
 | [`scripts/push_image.sh`](scripts/push_image.sh) | `docker build` + ECR push |
 
-Remote state: `s3://tck-labs-tfstate-6fd94603/signalfold.dev.tfstate`
+Remote state: `s3://tck-labs-tfstate-6fd94603/noise-to-signal.dev.tfstate`
 
 ## App URL
 
 ```bash
-wsl bash infrastructure/run-wsl.sh outputs dev
+cd infrastructure && just outputs
 # prints APP_URL=https://….awsapprunner.com
 ```
 
 ## Google OAuth (AWS Secrets Manager, not GitHub)
 
-Secret name: `signalfold/dev/google-oauth`  
+Secret name: `noise-to-signal/dev/google-oauth`  
 Keys: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`  
 Managed in the AWS Console (or seed once from `web/.env`):
 
 ```bash
-wsl bash infrastructure/run-wsl.sh upsert-google-oauth
+cd infrastructure && just upsert-google-oauth
 ```
 
 Terraform only **reads** this secret; it does not own the value.
@@ -96,7 +105,7 @@ Terraform only **reads** this secret; it does not own the value.
 Workflow: [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
 
 - Assumes `${{ secrets.AWS_ROLE_ARN }}` via OIDC
-- Runs `fmt-check` / `lint`, applies Terraform, builds/pushes the image, enables App Runner, posts **App URL** as a job summary + `::notice`
+- Runs `just fmt-check` / `just lint`, applies Terraform, builds/pushes the image, enables App Runner, posts **App URL** as a job summary + `::notice`
 
 **Repo secret:** `AWS_ROLE_ARN` only (Google stays in AWS Secrets Manager).
 
@@ -105,7 +114,7 @@ Workflow: [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-inf
 Local default remains SQLite. To hit shared RDS from a laptop:
 
 ```
-DATABASE_URL=postgresql://tckadmin:...@tck-labs-shared.cjmwyu84sg6w.eu-central-1.rds.amazonaws.com:5432/signalfold_dev?sslmode=require
+DATABASE_URL=postgresql://tckadmin:...@tck-labs-shared.cjmwyu84sg6w.eu-central-1.rds.amazonaws.com:5432/noise_to_signal_dev?sslmode=require
 DATABASE_SSL=true
 ```
 

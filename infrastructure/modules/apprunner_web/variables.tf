@@ -1,6 +1,6 @@
 variable "project" {
   type    = string
-  default = "signalfold"
+  default = "noise-to-signal"
 }
 
 variable "environment" {
@@ -25,7 +25,7 @@ variable "shared_rds_secret_name" {
 
 variable "db_name" {
   type        = string
-  description = "Postgres database name on the shared RDS host (e.g. signalfold_dev)"
+  description = "Postgres database name on the shared RDS host (e.g. noise_to_signal_dev)"
 }
 
 variable "google_oauth_secret_name" {

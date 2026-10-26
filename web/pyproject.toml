@@ -1,7 +1,7 @@
 [project]
 name = "web"
 version = "0.1.0"
-description = "Signalfold news aggregator web UI (Django)"
+description = "noise-to-signal news aggregator web UI (Django)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

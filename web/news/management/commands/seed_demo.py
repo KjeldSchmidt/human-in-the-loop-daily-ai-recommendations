@@ -137,7 +137,7 @@ class Command(BaseCommand):
         site_domain = os.environ.get("SITE_DOMAIN", "127.0.0.1:8000")
         Site.objects.update_or_create(
             id=1,
-            defaults={"domain": site_domain, "name": "Signalfold"},
+            defaults={"domain": site_domain, "name": "Noise to Signal"},
         )
         self.stdout.write(f"Site domain set to {site_domain}")
 

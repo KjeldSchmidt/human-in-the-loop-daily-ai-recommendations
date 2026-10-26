@@ -87,7 +87,7 @@ data "aws_secretsmanager_secret" "google_oauth" {
 
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${var.project}/${var.environment}/app"
-  description             = "Signalfold App Runner runtime secrets (SECRET_KEY, DATABASE_URL)"
+  description             = "noise-to-signal App Runner runtime secrets (SECRET_KEY, DATABASE_URL)"
   recovery_window_in_days = 0
   tags                    = local.tags
 }

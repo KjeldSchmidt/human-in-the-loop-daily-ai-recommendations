@@ -5,7 +5,7 @@ set -euo pipefail
 
 AWS_PROFILE="${AWS_PROFILE:-AdministratorAccess-465836752303}"
 SECRET_ID="${SECRET_ID:-tck-labs/shared/rds}"
-DATABASES=("signalfold_dev" "signalfold_prod")
+DATABASES=("noise_to_signal_dev" "noise_to_signal_prod")
 
 echo "Fetching credentials from Secrets Manager (${SECRET_ID})..."
 SECRET_JSON="$(aws secretsmanager get-secret-value \
@@ -44,4 +44,4 @@ for db in "${DATABASES[@]}"; do
   fi
 done
 
-echo "Done. App DATABASE_URL path must be /signalfold_dev or /signalfold_prod."
+echo "Done. App DATABASE_URL path must be /noise_to_signal_dev or /noise_to_signal_prod."

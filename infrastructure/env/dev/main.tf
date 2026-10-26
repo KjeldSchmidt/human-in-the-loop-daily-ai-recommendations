@@ -15,7 +15,7 @@ terraform {
   backend "s3" {
     # Same lab state bucket as tck-labs-base
     bucket       = "tck-labs-tfstate-6fd94603"
-    key          = "signalfold.dev.tfstate"
+    key          = "noise-to-signal.dev.tfstate"
     region       = "eu-central-1"
     encrypt      = true
     use_lockfile = true
@@ -29,9 +29,9 @@ provider "aws" {
 module "web" {
   source = "../../modules/apprunner_web"
 
-  project          = "signalfold"
+  project          = "noise-to-signal"
   environment      = "dev"
-  db_name          = "signalfold_dev"
+  db_name          = "noise_to_signal_dev"
   image_tag        = var.image_tag
   public_hostname  = var.public_hostname
   enable_apprunner = var.enable_apprunner

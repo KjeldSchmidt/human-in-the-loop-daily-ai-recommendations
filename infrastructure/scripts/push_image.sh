@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build web/ Docker image and push to the Signalfold ECR repository.
+# Build web/ Docker image and push to the noise-to-signal ECR repository.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

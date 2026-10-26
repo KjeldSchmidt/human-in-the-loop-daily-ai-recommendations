@@ -1,4 +1,4 @@
-# Signalfold / LangChain news aggregator
+# noise-to-signal
 
 A personal news aggregator: subscribe to RSS feeds, pre-filter a daily brief against your taste, give relevance feedback, and answer short follow-up questions. The **web UI** is a Django app; the **AI/LangGraph core** lives under `runner/` and is developed separately.
 
@@ -57,4 +57,4 @@ just run
 ## Hosting (AWS)
 
 - **Compute:** App Runner (container from ECR) — see [`infrastructure/README.md`](infrastructure/README.md)
-- **Database:** dedicated Postgres DBs `signalfold_dev` / `signalfold_prod` on the shared [tck-labs-base](../tck-labs-base) RDS host (not Render)
+- **Database:** dedicated Postgres DBs `noise_to_signal_dev` / `noise_to_signal_prod` on the shared [tck-labs-base](../tck-labs-base) RDS host (not Render)

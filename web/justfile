@@ -1,4 +1,4 @@
-# Signalfold web — run `just` to list recipes
+# noise-to-signal web — run `just` to list recipes
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
 # List available recipes (default)
@@ -48,7 +48,7 @@ collectstatic:
 manage *args:
     uv run python manage.py {{args}}
 
-# --- AWS (from repo root via WSL) ---
-# wsl bash ../infrastructure/run-wsl.sh create-databases
-# wsl bash ../infrastructure/run-wsl.sh apply dev
-# wsl bash ../infrastructure/run-wsl.sh push-image
+# --- AWS (see ../infrastructure/justfile) ---
+# cd ../infrastructure && just create-databases
+# cd ../infrastructure && just apply
+# cd ../infrastructure && just push-image

@@ -1,4 +1,4 @@
-# Signalfold (web)
+# noise-to-signal (web)
 
 Django frontend for the personal news aggregator MVP. Placeholder ranking and follow-up questions — the LangGraph core in `../runner` is intentionally untouched.
 
@@ -49,7 +49,7 @@ Open http://127.0.0.1:8000 → **Continue with Google**.
 Without `DATABASE_URL`, SQLite (`db.sqlite3`) is used. To use the shared AWS RDS lab DB:
 
 ```
-DATABASE_URL=postgresql://tckadmin:…@tck-labs-shared.cjmwyu84sg6w.eu-central-1.rds.amazonaws.com:5432/signalfold_dev?sslmode=require
+DATABASE_URL=postgresql://tckadmin:…@tck-labs-shared.cjmwyu84sg6w.eu-central-1.rds.amazonaws.com:5432/noise_to_signal_dev?sslmode=require
 DATABASE_SSL=true
 ```
 
@@ -59,7 +59,7 @@ See [`../infrastructure/README.md`](../infrastructure/README.md).
 
 Summary:
 
-1. `wsl bash infrastructure/run-wsl.sh create-databases` → `CREATE DATABASE signalfold_dev` / `signalfold_prod`
+1. `cd infrastructure && just create-databases` → `CREATE DATABASE noise_to_signal_dev` / `noise_to_signal_prod`
 2. Terraform apply with `enable_apprunner=false` → ECR + app secret
 3. `push-image` → Docker build/push
 4. Terraform apply with `enable_apprunner=true`

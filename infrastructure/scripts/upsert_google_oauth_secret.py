@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upsert signalfold/<env>/google-oauth from web/.env (or GOOGLE_* env vars)."""
+"""Upsert noise-to-signal/<env>/google-oauth from web/.env (or GOOGLE_* env vars)."""
 
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ def load_dotenv(path: Path) -> dict[str, str]:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
-    env_name = os.environ.get("SIGNALFOLD_ENV", "dev")
+    env_name = os.environ.get("APP_ENV", "dev")
     secret_name = os.environ.get(
-        "GOOGLE_OAUTH_SECRET_NAME", f"signalfold/{env_name}/google-oauth"
+        "GOOGLE_OAUTH_SECRET_NAME", f"noise-to-signal/{env_name}/google-oauth"
     )
     region = os.environ.get("AWS_REGION", "eu-central-1")
     profile = os.environ.get("AWS_PROFILE", "AdministratorAccess-465836752303")
@@ -83,7 +83,7 @@ def main() -> int:
             "--name",
             secret_name,
             "--description",
-            "Signalfold Google OAuth — manage in AWS Console",
+            "noise-to-signal Google OAuth — manage in AWS Console",
             "--secret-string",
             payload,
         )
