@@ -47,6 +47,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "config.middleware.ViewerHostMiddleware",  # before SecurityMiddleware
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -58,7 +59,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
 ]
 
-# CloudFront viewer-request function sets X-Forwarded-Host / X-Forwarded-Proto.
+# Set from X-Viewer-Host by ViewerHostMiddleware (CloudFront cannot set X-Forwarded-Host).
 USE_X_FORWARDED_HOST = True
 
 ROOT_URLCONF = "config.urls"

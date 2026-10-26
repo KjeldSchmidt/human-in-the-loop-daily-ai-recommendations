@@ -180,7 +180,8 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# So Django sees the CloudFront host + https (Function URL origin Host stays Lambda).
+# CloudFront Functions cannot set X-Forwarded-* (disallowed → 502).
+# Pass viewer Host as a custom header; Django middleware promotes it.
 resource "aws_cloudfront_function" "x_forwarded_host" {
   name    = "${local.name_prefix}-xfh"
   runtime = "cloudfront-js-2.0"
@@ -189,9 +190,8 @@ resource "aws_cloudfront_function" "x_forwarded_host" {
     function handler(event) {
       var request = event.request;
       if (request.headers.host) {
-        request.headers["x-forwarded-host"] = { value: request.headers.host.value };
+        request.headers["x-viewer-host"] = { value: request.headers.host.value };
       }
-      request.headers["x-forwarded-proto"] = { value: "https" };
       return request;
     }
   EOF
