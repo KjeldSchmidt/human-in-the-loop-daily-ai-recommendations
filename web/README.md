@@ -9,10 +9,10 @@ Auth is **Google-only** (django-allauth). Django still has a `User` row per pers
 1. In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials), create an **OAuth 2.0 Client ID** of type **Web application**.
 2. Authorized JavaScript origins:
    - Local: `http://127.0.0.1:8000`
-   - AWS Lambda Function URL: `https://<id>.lambda-url.eu-central-1.on.aws`
+   - AWS CloudFront: `https://dxxxx.cloudfront.net` (from `just outputs` / `APP_URL`)
 3. Authorized redirect URIs (exact):
    - Local: `http://127.0.0.1:8000/accounts/google/login/callback/`
-   - AWS: `https://<id>.lambda-url.eu-central-1.on.aws/accounts/google/login/callback/`
+   - AWS: `https://dxxxx.cloudfront.net/accounts/google/login/callback/`
 4. Put the client ID and secret in **`web/.env`** (local) or Secrets Manager (AWS):
 
 ```
@@ -28,8 +28,8 @@ Also set `SITE_DOMAIN` to match the host (no scheme):
 
 ```
 SITE_DOMAIN=127.0.0.1:8000
-# Lambda Function URL:
-SITE_DOMAIN=xxxxxxxx.lambda-url.eu-central-1.on.aws
+# AWS CloudFront:
+SITE_DOMAIN=dxxxx.cloudfront.net
 ```
 
 ## Local development
@@ -59,12 +59,10 @@ See [`../infrastructure/README.md`](../infrastructure/README.md).
 
 Summary:
 
-1. `cd infrastructure && just create-databases` → `CREATE DATABASE noise_to_signal_dev` / `noise_to_signal_prod`
-2. Terraform apply with `enable_lambda=false` → ECR + app secret
-3. `push-image` → Docker build/push (Lambda Python 3.12 + Mangum)
-4. Terraform apply with `enable_lambda=true`
-5. Set `public_hostname` from Function URL; update Google OAuth redirects
-6. `cd infrastructure && just setup-remote` — migrate/seed via Lambda invoke (not on every cold start)
+1. `cd infrastructure && just create-databases`
+2. `just upsert-google-oauth` (once)
+3. `just deploy` — base (ECR) → push image → app (Lambda + CloudFront) → migrate/seed
+4. Point Google OAuth at the CloudFront host from `just outputs`
 
 ### Caveats
 

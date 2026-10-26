@@ -11,8 +11,6 @@ terraform {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 data "aws_secretsmanager_secret" "shared_rds" {
   name = var.shared_rds_secret_name
 }
@@ -39,74 +37,22 @@ locals {
     var.db_name,
   )
 
-  image_identifier = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
-
-  # Leading-dot host allows any *.lambda-url.<region>.on.aws until public_hostname is set.
-  allowed_hosts = var.public_hostname != "" ? var.public_hostname : ".lambda-url.${var.aws_region}.on.aws"
-  csrf_origins  = var.public_hostname != "" ? "https://${var.public_hostname}" : ""
-  site_domain   = var.public_hostname != "" ? var.public_hostname : "localhost"
+  image_identifier = "${var.ecr_repository_url}:${var.image_tag}"
 
   google_oauth_secret_name = var.google_oauth_secret_name != "" ? var.google_oauth_secret_name : "${var.project}/${var.environment}/google-oauth"
 
   app_secret   = jsondecode(aws_secretsmanager_secret_version.app.secret_string)
   google_oauth = jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string)
+
+  function_url_hostname = trimsuffix(
+    replace(aws_lambda_function_url.web.function_url, "https://", ""),
+    "/",
+  )
 }
 
 resource "random_password" "django_secret" {
   length  = 50
   special = false
-}
-
-resource "aws_ecr_repository" "app" {
-  name                 = local.name_prefix
-  image_tag_mutability = "MUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = false
-  }
-
-  tags = local.tags
-}
-
-resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last 5 images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 5
-      }
-      action = { type = "expire" }
-    }]
-  })
-}
-
-# Allow Lambda to pull images from this repository.
-resource "aws_ecr_repository_policy" "app" {
-  repository = aws_ecr_repository.app.name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid    = "LambdaECRImageRetrievalPolicy"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-      Action = [
-        "ecr:BatchGetImage",
-        "ecr:GetDownloadUrlForLayer",
-      ]
-      Condition = {
-        StringLike = {
-          "aws:sourceArn" = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.name_prefix}"
-        }
-      }
-    }]
-  })
 }
 
 data "aws_secretsmanager_secret" "google_oauth" {
@@ -173,8 +119,6 @@ resource "aws_iam_role_policy" "lambda_secrets" {
 }
 
 resource "aws_lambda_function" "web" {
-  count = var.enable_lambda ? 1 : 0
-
   function_name = local.name_prefix
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
@@ -189,13 +133,12 @@ resource "aws_lambda_function" "web" {
 
   environment {
     variables = {
-      DEBUG                = "false"
-      DATABASE_SSL         = "true"
-      ALLOWED_HOSTS        = local.allowed_hosts
-      CSRF_TRUSTED_ORIGINS = local.csrf_origins
-      SITE_DOMAIN          = local.site_domain
-      SECRET_KEY           = local.app_secret.SECRET_KEY
-      DATABASE_URL         = local.app_secret.DATABASE_URL
+      DEBUG         = "false"
+      DATABASE_SSL  = "true"
+      # Host comes from CloudFront via X-Forwarded-Host (see cloudfront_function).
+      ALLOWED_HOSTS = ".cloudfront.net,.lambda-url.${var.aws_region}.on.aws"
+      SECRET_KEY    = local.app_secret.SECRET_KEY
+      DATABASE_URL  = local.app_secret.DATABASE_URL
       GOOGLE_CLIENT_ID     = local.google_oauth.GOOGLE_CLIENT_ID
       GOOGLE_CLIENT_SECRET = local.google_oauth.GOOGLE_CLIENT_SECRET
     }
@@ -206,24 +149,91 @@ resource "aws_lambda_function" "web" {
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,
     aws_iam_role_policy.lambda_secrets,
-    aws_ecr_repository_policy.app,
     aws_secretsmanager_secret_version.app,
   ]
 }
 
 resource "aws_lambda_function_url" "web" {
-  count = var.enable_lambda ? 1 : 0
-
-  function_name      = aws_lambda_function.web[0].function_name
+  function_name      = aws_lambda_function.web.function_name
   authorization_type = "NONE"
 }
 
 resource "aws_lambda_permission" "function_url" {
-  count = var.enable_lambda ? 1 : 0
-
   statement_id           = "FunctionURLAllowPublicAccess"
   action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.web[0].function_name
+  function_name          = aws_lambda_function.web.function_name
   principal              = "*"
   function_url_auth_type = "NONE"
+}
+
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
+}
+
+data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
+  name = "Managed-AllViewerExceptHostHeader"
+}
+
+# Copy viewer Host into X-Forwarded-Host so Django absolute URLs / CSRF use CloudFront.
+resource "aws_cloudfront_function" "x_forwarded_host" {
+  name    = "${local.name_prefix}-xfh"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-EOF
+    function handler(event) {
+      var request = event.request;
+      if (request.headers.host) {
+        request.headers["x-forwarded-host"] = { value: request.headers.host.value };
+      }
+      return request;
+    }
+  EOF
+}
+
+resource "aws_cloudfront_distribution" "web" {
+  enabled             = true
+  is_ipv6_enabled     = true
+  comment             = local.name_prefix
+  default_root_object = ""
+  price_class         = "PriceClass_100"
+  wait_for_deployment = true
+  tags                = local.tags
+
+  origin {
+    domain_name = local.function_url_hostname
+    origin_id   = "lambda-function-url"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  default_cache_behavior {
+    target_origin_id       = "lambda-function-url"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer_except_host.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.x_forwarded_host.arn
+    }
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
 }

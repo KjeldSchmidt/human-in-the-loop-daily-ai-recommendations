@@ -58,6 +58,10 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
 ]
 
+# CloudFront viewer-request function sets X-Forwarded-Host to the CloudFront domain.
+USE_X_FORWARDED_HOST = True
+
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [

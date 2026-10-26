@@ -1,4 +1,4 @@
-# OIDC via AWS_ROLE_ARN secret + terraform + image push + Function URL notice.
+# Deploy via infrastructure/justfile — keep Terraform choreography out of this file.
 name: Deploy Infra
 
 on:
@@ -22,7 +22,7 @@ jobs:
     name: Deploy Dev
     runs-on: ubuntu-latest
     outputs:
-      app_url: ${{ steps.urls.outputs.app_url }}
+      app_url: ${{ steps.summary.outputs.app_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,63 +50,25 @@ jobs:
         working-directory: infrastructure
         run: just lint
 
-      # Phase 1: ECR + app secret (Google OAuth lives in noise-to-signal/dev/google-oauth — console-managed)
-      - name: Apply infra (ECR + secrets)
-        working-directory: infrastructure/env/dev
-        run: |
-          terraform init -reconfigure -input=false
-          terraform apply -auto-approve -input=false -lock-timeout=5m \
-            -var="enable_lambda=false"
-
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push image
-        id: image
+      - name: Deploy
         working-directory: infrastructure
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          just push-image "${IMAGE_TAG}"
-          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Apply infra (enable Lambda)
-        working-directory: infrastructure/env/dev
-        run: |
-          terraform apply -auto-approve -input=false -lock-timeout=5m \
-            -var="enable_lambda=true" \
-            -var="image_tag=${{ steps.image.outputs.tag }}"
-
-      - name: Set public_hostname from Function URL
-        working-directory: infrastructure/env/dev
-        run: |
-          URL="$(terraform output -raw service_url)"
-          HOST="${URL#https://}"
-          HOST="${HOST%/}"
-          terraform apply -auto-approve -input=false -lock-timeout=5m \
-            -var="enable_lambda=true" \
-            -var="image_tag=${{ steps.image.outputs.tag }}" \
-            -var="public_hostname=${HOST}"
-
-      - name: Migrate and seed via Lambda invoke
-        working-directory: infrastructure
-        run: just setup-remote
+        run: just deploy "${{ github.sha }}"
 
       - name: Publish App URL
-        id: urls
-        working-directory: infrastructure/env/dev
+        id: summary
+        working-directory: infrastructure
         run: |
-          URL="$(terraform output -raw service_url)"
+          URL="$(cd env/dev/app && terraform output -raw service_url)"
           echo "app_url=$URL" >> "$GITHUB_OUTPUT"
           {
-            echo "### noise-to-signal Lambda"
+            echo "### noise-to-signal (CloudFront)"
             echo ""
             echo "**App URL:** $URL"
             echo ""
+            echo "Use this host for Google OAuth origin + redirect URI."
+            echo ""
             echo '```'
-            terraform output
+            cd env/dev/app && terraform output
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice title=Function URL::$URL"
-          echo "APP_URL=$URL"
+          echo "::notice title=App URL (CloudFront)::$URL"

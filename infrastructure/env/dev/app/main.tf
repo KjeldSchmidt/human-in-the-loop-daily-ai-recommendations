@@ -13,9 +13,8 @@ terraform {
   }
 
   backend "s3" {
-    # Same lab state bucket as tck-labs-base
     bucket       = "tck-labs-tfstate-6fd94603"
-    key          = "noise-to-signal.dev.tfstate"
+    key          = "noise-to-signal.dev.app.tfstate"
     region       = "eu-central-1"
     encrypt      = true
     use_lockfile = true
@@ -26,23 +25,40 @@ provider "aws" {
   region = "eu-central-1"
 }
 
-module "web" {
-  source = "../../modules/lambda_web"
+data "terraform_remote_state" "shared" {
+  backend = "s3"
+  config = {
+    bucket = "tck-labs-tfstate-6fd94603"
+    key    = "noise-to-signal.shared.tfstate"
+    region = "eu-central-1"
+  }
+}
 
-  project         = "noise-to-signal"
-  environment     = "dev"
-  db_name         = "noise_to_signal_dev"
-  image_tag       = var.image_tag
-  public_hostname = var.public_hostname
-  enable_lambda   = var.enable_lambda
+module "web" {
+  source = "../../../modules/web_app"
+
+  project            = "noise-to-signal"
+  environment        = "dev"
+  db_name            = "noise_to_signal_dev"
+  ecr_repository_url = data.terraform_remote_state.shared.outputs.ecr_repository_url
+  image_tag          = var.image_tag
+}
+
+variable "image_tag" {
+  type    = string
+  default = "latest"
 }
 
 output "ecr_repository_url" {
-  value = module.web.ecr_repository_url
+  value = data.terraform_remote_state.shared.outputs.ecr_repository_url
 }
 
 output "service_url" {
   value = module.web.service_url
+}
+
+output "function_url" {
+  value = module.web.function_url
 }
 
 output "function_name" {
@@ -51,6 +67,10 @@ output "function_name" {
 
 output "function_arn" {
   value = module.web.function_arn
+}
+
+output "cloudfront_domain_name" {
+  value = module.web.cloudfront_domain_name
 }
 
 output "app_secret_name" {

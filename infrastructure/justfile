@@ -1,58 +1,74 @@
 # noise-to-signal infra — run `just` (from this directory) to list recipes
+#
+# Terraform stacks (full applies, no -target lists):
+#   env/shared     — ECR (one repo for the account; tags separate envs)
+#   env/<env>/app  — Lambda + Function URL + CloudFront
 
-# List available recipes (default)
 default:
     @just --list
 
-# terraform fmt
 fmt:
     terraform fmt -recursive .
 
-# Check Terraform formatting
 fmt-check:
     terraform fmt -recursive -check .
 
-# Init + validate the Lambda web module
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd modules/lambda_web >/dev/null
-    terraform init -reconfigure -backend=false >/dev/null
-    terraform validate
-    popd >/dev/null
+    for m in ecr web_app; do
+      pushd "modules/${m}" >/dev/null
+      terraform init -reconfigure -backend=false >/dev/null
+      terraform validate
+      popd >/dev/null
+    done
 
-# terraform plan for env (default: dev)
-plan env="dev":
+# Shared ECR (once per account; safe to re-run)
+apply-shared:
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd "env/{{env}}" >/dev/null
+    pushd env/shared >/dev/null
+    terraform init -reconfigure -input=false
+    terraform apply -auto-approve -input=false -lock-timeout=5m
+    popd >/dev/null
+
+plan-shared:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pushd env/shared >/dev/null
     terraform init -reconfigure
     terraform plan
     popd >/dev/null
 
-# terraform apply for env (default: dev)
-apply env="dev":
+# Per-env app (Lambda + CloudFront). Image tag must already exist in shared ECR.
+apply-app tag="latest" env="dev":
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd "env/{{env}}" >/dev/null
-    terraform init -reconfigure
-    terraform apply
+    pushd "env/{{env}}/app" >/dev/null
+    terraform init -reconfigure -input=false
+    terraform apply -auto-approve -input=false -lock-timeout=5m \
+      -var="image_tag={{tag}}"
     popd >/dev/null
 
-# terraform apply -auto-approve (CI/CD)
-apply-auto env="dev":
+plan-app tag="latest" env="dev":
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd "env/{{env}}" >/dev/null
+    pushd "env/{{env}}/app" >/dev/null
     terraform init -reconfigure
-    terraform apply -auto-approve
+    terraform plan -var="image_tag={{tag}}"
     popd >/dev/null
 
-# Show outputs; prints APP_URL when Lambda Function URL is enabled
+# shared → push → app → migrate/seed
+deploy tag="latest" env="dev":
+    just apply-shared
+    DEPLOY_ENV={{env}} just push-image "{{tag}}"
+    just apply-app "{{tag}}" "{{env}}"
+    just setup-remote "{{env}}"
+
 outputs env="dev":
     #!/usr/bin/env bash
     set -euo pipefail
-    pushd "env/{{env}}" >/dev/null
+    pushd "env/{{env}}/app" >/dev/null
     terraform init -reconfigure >/dev/null
     terraform output
     url="$(terraform output -raw service_url 2>/dev/null || true)"
@@ -62,11 +78,10 @@ outputs env="dev":
       echo "Open: ${url}"
     else
       echo ""
-      echo "APP_URL=(not deployed — set enable_lambda=true and apply after push-image)"
+      echo "APP_URL=(not deployed — just deploy)"
     fi
     popd >/dev/null
 
-# CREATE DATABASE noise_to_signal_dev / noise_to_signal_prod on shared RDS
 create-databases:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -113,18 +128,14 @@ create-databases:
 
     echo "Done. App DATABASE_URL path must be /noise_to_signal_dev or /noise_to_signal_prod."
 
-# Put GOOGLE_* from web/.env into Secrets Manager (console-managed thereafter)
 upsert-google-oauth:
     python3 scripts/upsert_google_oauth_secret.py
 
-# Invoke a Django manage command on the deployed Lambda (not on cold start).
-# Example: just manage migrate --noinput
-# Example: DEPLOY_ENV=dev just manage seed_demo
 manage *args:
     #!/usr/bin/env bash
     set -euo pipefail
     env="${DEPLOY_ENV:-dev}"
-    tf_dir="{{justfile_directory()}}/env/${env}"
+    tf_dir="{{justfile_directory()}}/env/${env}/app"
     fn="$(cd "$tf_dir" && terraform output -raw function_name)"
     payload="$(python3 -c 'import json,sys; print(json.dumps({"manage": sys.argv[1:]}))' {{args}})"
     out="$(mktemp)"
@@ -137,35 +148,29 @@ manage *args:
     echo
     rm -f "$out"
 
-# migrate + seed on deployed Lambda
 setup-remote env="dev":
     DEPLOY_ENV={{env}} just manage migrate --noinput
     DEPLOY_ENV={{env}} just manage seed_demo
 
-# Build and push web image to ECR (requires prior apply for repo).
-# Also tags :latest when tag != latest. Local: set AWS_PROFILE for ECR login.
-# CI: run after amazon-ecr-login (no AWS_PROFILE needed).
-# Usage: just push-image
-#        just push-image "$GITHUB_SHA"
-#        DEPLOY_ENV=dev just push-image my-tag
+# ECR URL from shared stack
 push-image tag="latest":
     #!/usr/bin/env bash
     set -euo pipefail
-    env="${DEPLOY_ENV:-dev}"
     root="$(cd "{{justfile_directory()}}/.." && pwd)"
-    tf_dir="{{justfile_directory()}}/env/${env}"
+    tf_dir="{{justfile_directory()}}/env/shared"
     aws_region="${AWS_REGION:-eu-central-1}"
     repo="$(cd "$tf_dir" && terraform output -raw ecr_repository_url)"
 
+    aws_cli=(aws)
     if [[ -n "${AWS_PROFILE:-}" ]]; then
-      account_id="$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text)"
-      echo "Logging in to ECR ${account_id} (${aws_region})..."
-      aws ecr get-login-password --profile "$AWS_PROFILE" --region "$aws_region" \
-        | docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${aws_region}.amazonaws.com"
+      aws_cli+=( --profile "$AWS_PROFILE" )
     fi
+    account_id="$("${aws_cli[@]}" sts get-caller-identity --query Account --output text)"
+    echo "Logging in to ECR ${account_id} (${aws_region})..."
+    "${aws_cli[@]}" ecr get-login-password --region "$aws_region" \
+      | docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${aws_region}.amazonaws.com"
 
     echo "Building ${repo}:{{tag}} from web/..."
-    # Lambda rejects BuildKit OCI provenance/SBOM attestation manifests
     docker build \
       --platform linux/amd64 \
       --provenance=false \
@@ -180,8 +185,3 @@ push-image tag="latest":
     fi
 
     echo "Pushed ${repo}:{{tag}}"
-    fn="$(cd "$tf_dir" && terraform output -raw function_name 2>/dev/null || true)"
-    if [[ -n "$fn" && "$fn" != "null" ]]; then
-      echo "Update Lambda to this image:"
-      echo "  aws lambda update-function-code --function-name ${fn} --image-uri ${repo}:{{tag}}"
-    fi

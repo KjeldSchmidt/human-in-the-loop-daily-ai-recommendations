@@ -1,126 +1,78 @@
 # noise-to-signal infrastructure (AWS)
 
-Host Django on **Lambda (container image) + Function URL** + **ECR**, with a **dedicated Postgres database** on the shared [tck-labs-base](../../tck-labs-base) RDS instance.
+Django on **Lambda (container image) → Function URL → CloudFront**, image in **shared ECR**, data on shared [tck-labs-base](../../tck-labs-base) RDS.
+
+## Stacks
+
+| Stack | Path | State key | Contains |
+|-------|------|-----------|----------|
+| **shared** | [`env/shared`](env/shared) | `noise-to-signal.shared.tfstate` | One ECR repo (`noise-to-signal`) for all envs |
+| **app (dev)** | [`env/dev/app`](env/dev/app) | `noise-to-signal.dev.app.tfstate` | secrets, IAM, Lambda, Function URL, CloudFront |
+
+Environments share the ECR; distinguish releases with **image tags** (git sha / `latest`). A future `env/prod/app` would use the same shared state.
+
+Deploy order: **shared → push image → app**.
 
 ## Cost model
 
-- **Scale to zero:** no always-on compute or load balancer. Idle cost is essentially shared RDS + Secrets Manager.
-- Cold starts are a few seconds (acceptable for personal / low traffic).
-- Lambda talks to RDS over the public endpoint (no VPC / NAT fixed cost).
+- Scale to zero on compute (Lambda). Idle ≈ shared RDS + Secrets Manager (+ CloudFront when requested).
+- Public URL is stable CloudFront `d….cloudfront.net` (Google OAuth). Raw `*.lambda-url.*` is origin-only.
 
 ## Isolation model
-
-Same RDS **host**, separate Postgres **databases**:
 
 ```sql
 CREATE DATABASE noise_to_signal_dev;
 CREATE DATABASE noise_to_signal_prod;
 ```
 
-Not table prefixes. Not schemas-as-isolation. Bootstrap DB `tcklabs` is never used for app data.
-
 ## Prerequisites
 
 - WSL + AWS SSO: `AWS_PROFILE=AdministratorAccess-465836752303`
-- [`just`](https://github.com/casey/just) (recipes in [`justfile`](justfile); `just` lists them)
-- Shared RDS already applied via tck-labs-base
-- Docker (for image push)
-- `psql` client (for `create-databases`)
-- Google OAuth web client (callback will be the Lambda Function URL)
+- [`just`](https://github.com/casey/just), Docker, `psql`, Google OAuth client
+- Shared RDS via tck-labs-base
 
 ```bash
 cd infrastructure
 export AWS_PROFILE=AdministratorAccess-465836752303
-just   # list recipes
+just
 ```
 
-## Deploy sequence
+## Deploy
 
 ```bash
-cd infrastructure
-export AWS_PROFILE=AdministratorAccess-465836752303
-
-# 1) Dedicated DBs on shared RDS (CREATE DATABASE — not table prefixes)
 just create-databases
-
-# 1b) Google OAuth into Secrets Manager (from web/.env); edit later in Console
 just upsert-google-oauth
+just deploy                 # or: just deploy "$GIT_SHA"
 
-# 2) Tfvars
-cp env/dev/terraform.tfvars.example env/dev/terraform.tfvars
-# leave enable_lambda = false
-
-# 3) ECR + Secrets Manager app secret (no Lambda yet)
-just apply
-
-# 4) Build/push image
-just push-image
-
-# 5) Enable Lambda + Function URL
-# set enable_lambda = true in terraform.tfvars
-just apply
-
-# 6) CSRF / Site — strip https:// and trailing / from service_url into public_hostname
-just apply
-
-# 7) Migrate / seed (not on every cold start)
-just setup-remote
+# Steps: apply-shared → push-image → apply-app → setup-remote
 ```
 
-Google Cloud Console — add:
+Google OAuth (host from `just outputs` → `APP_URL`):
 
-- Origin: `https://<hostname>`
-- Redirect: `https://<hostname>/accounts/google/login/callback/`
+- Origin: `https://dxxxx.cloudfront.net`
+- Redirect: `https://dxxxx.cloudfront.net/accounts/google/login/callback/`
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| [`justfile`](justfile) | Infra recipes (`fmt-check`, `apply`, `outputs`, …) |
-| [`modules/lambda_web`](modules/lambda_web) | ECR, Secrets Manager app secret, Lambda + Function URL, IAM |
-| [`env/dev`](env/dev) | Dev wiring → DB `noise_to_signal_dev` |
-| `just create-databases` | `CREATE DATABASE` on shared RDS |
-| `just push-image` | `docker build` + ECR push (Lambda-safe flags) |
-| `just setup-remote` / `just manage …` | migrate/seed (or any manage cmd) via Lambda invoke |
-| [`scripts/upsert_google_oauth_secret.py`](scripts/upsert_google_oauth_secret.py) | seed Google OAuth secret from `web/.env` |
+| [`justfile`](justfile) | `apply-shared`, `apply-app`, `deploy`, … |
+| [`modules/ecr`](modules/ecr) | Shared ECR |
+| [`modules/web_app`](modules/web_app) | Per-env compute + secrets |
+| [`env/shared`](env/shared) | Shared stack root |
+| [`env/dev/app`](env/dev/app) | Dev app stack root |
 
-Remote state: `s3://tck-labs-tfstate-6fd94603/noise-to-signal.dev.tfstate`
+## GitHub Actions
 
-## App URL
+[`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml) — OIDC + `just deploy <sha>`.
 
-```bash
-cd infrastructure && just outputs
-# prints APP_URL=https://….lambda-url.eu-central-1.on.aws/
-```
+**Repo secret:** `AWS_ROLE_ARN` only.
 
-## Google OAuth (AWS Secrets Manager, not GitHub)
+## State / existing AWS resources
 
-Secret name: `noise-to-signal/dev/google-oauth`  
-Keys: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`  
-Managed in the AWS Console (or seed once from `web/.env`):
+**No `moved` blocks** were added when splitting stacks. New state keys start empty, so the next apply will **try to create** resources. If `noise-to-signal-dev` ECR / old Lambda / etc. already exist from earlier deploys, either:
 
-```bash
-cd infrastructure && just upsert-google-oauth
-```
+1. Delete/orphan the old resources and let Terraform create the new names (`noise-to-signal` ECR, etc.), or
+2. `terraform import` into the new shared/app states.
 
-Terraform **reads** this secret into Lambda env; it does not own the value lifecycle.
-
-## GitHub Actions deploy
-
-Workflow: [`.github/workflows/deploy-infra.yml`](../.github/workflows/deploy-infra.yml)
-
-- Assumes `${{ secrets.AWS_ROLE_ARN }}` via OIDC
-- Runs `just fmt-check` / `just lint`, applies Terraform, builds/pushes the image, enables Lambda, sets `public_hostname`, invokes migrate/seed, posts **App URL** as a job summary + `::notice`
-
-**Repo secret:** `AWS_ROLE_ARN` only (Google stays in AWS Secrets Manager).
-
-## Local vs AWS DB
-
-Local default remains SQLite. To hit shared RDS from a laptop:
-
-```
-DATABASE_URL=postgresql://tckadmin:...@tck-labs-shared.cjmwyu84sg6w.eu-central-1.rds.amazonaws.com:5432/noise_to_signal_dev?sslmode=require
-DATABASE_SSL=true
-```
-
-(Pull password from Secrets Manager `tck-labs/shared/rds`.)
+Older state keys (`noise-to-signal.dev.tfstate`, `….dev.base.tfstate`) are unused by this layout.

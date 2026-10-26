@@ -56,5 +56,5 @@ just run
 
 ## Hosting (AWS)
 
-- **Compute:** Lambda container image + Function URL (scale to zero) — see [`infrastructure/README.md`](infrastructure/README.md)
+- **Compute:** Lambda + CloudFront (scale to zero) — see [`infrastructure/README.md`](infrastructure/README.md)
 - **Database:** dedicated Postgres DBs `noise_to_signal_dev` / `noise_to_signal_prod` on the shared [tck-labs-base](../tck-labs-base) RDS host (not Render)
