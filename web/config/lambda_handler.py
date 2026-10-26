@@ -8,7 +8,7 @@ from typing import Any
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-from config.wsgi import application  # noqa: E402  # sets up Django
+from config.asgi import application  # noqa: E402  # sets up Django (Mangum needs ASGI)
 from mangum import Mangum  # noqa: E402
 
 _mangum = Mangum(application, lifespan="off")
