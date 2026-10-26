@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load socialaccount %}
 {% block title %}Home{% endblock %}
 {% block content %}
 <section class="hero">
@@ -10,8 +9,63 @@
     and learns from your relevance feedback and a few short taste questions.
   </p>
   <div class="cta-row">
-    <a class="btn primary" href="{% provider_login_url 'google' %}">Continue with Google</a>
+    <a class="btn primary" id="google-login" href="{% url 'oauth_popup_start' %}">Continue with Google</a>
   </div>
   <p class="muted" style="margin-top:1rem">No passwords — sign-in is handled by Google.</p>
 </section>
+<script>
+  (function () {
+    var briefUrl = "{% url 'brief' %}";
+
+    function goAfterLogin(next) {
+      window.location.href = next || briefUrl;
+    }
+
+    // Popup can't rely on window.opener after Google (COOP); it writes localStorage instead.
+    window.addEventListener("storage", function (e) {
+      if (e.key !== "oauth_popup_done" || !e.newValue) return;
+      try {
+        var data = JSON.parse(e.newValue);
+        goAfterLogin(data.next);
+      } catch (err) {
+        goAfterLogin();
+      }
+    });
+
+    document.getElementById("google-login")?.addEventListener("click", function (e) {
+      e.preventDefault();
+      var url = e.currentTarget.href;
+      var w = 520, h = 640;
+      var left = Math.max(0, (screen.width - w) / 2);
+      var top = Math.max(0, (screen.height - h) / 2);
+      var popup = window.open(
+        url,
+        "google_oauth",
+        "popup=yes,width=" + w + ",height=" + h + ",left=" + left + ",top=" + top
+      );
+      if (!popup) {
+        window.location.href = url;
+        return;
+      }
+
+      // Backup: when popup returns to same origin on popup-done, close it and navigate.
+      var timer = setInterval(function () {
+        if (popup.closed) {
+          clearInterval(timer);
+          return;
+        }
+        try {
+          var path = popup.location.pathname;
+          if (path.indexOf("/oauth/popup-done") === 0) {
+            clearInterval(timer);
+            popup.close();
+            goAfterLogin();
+          }
+        } catch (err) {
+          // Cross-origin while on accounts.google.com — keep polling.
+        }
+      }, 400);
+    });
+  })();
+</script>
 {% endblock %}

@@ -159,7 +159,8 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "google_login"
-LOGIN_REDIRECT_URL = "brief"
+# Popup-done closes the OAuth window (or redirects to brief if not a popup).
+LOGIN_REDIRECT_URL = "oauth_popup_done"
 LOGOUT_REDIRECT_URL = "landing"
 ACCOUNT_LOGOUT_REDIRECT_URL = "landing"
 

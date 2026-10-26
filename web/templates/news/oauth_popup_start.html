@@ -1,0 +1,17 @@
+{% load socialaccount %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Continue with Google</title>
+</head>
+<body>
+  <p>Redirecting to Google…</p>
+  <script>
+    window.location.replace("{% provider_login_url 'google' %}");
+  </script>
+  <noscript>
+    <a href="{% provider_login_url 'google' %}">Continue with Google</a>
+  </noscript>
+</body>
+</html>

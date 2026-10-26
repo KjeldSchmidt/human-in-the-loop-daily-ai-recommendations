@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from news.forms import CustomFeedForm, FollowUpAnswerForm
@@ -20,6 +21,30 @@ def landing(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("brief")
     return render(request, "news/landing.html")
+
+
+def oauth_popup_start(request: HttpRequest) -> HttpResponse:
+    """Open this in the OAuth popup first (200 + session cookie), then go to Google.
+
+    Opening ``/accounts/google/login/`` directly in a popup often drops the session
+    cookie on the immediate 302 → Google, which breaks state/PKCE on callback.
+    """
+    if request.user.is_authenticated:
+        return redirect("oauth_popup_done")
+    request.session["oauth_popup"] = True
+    request.session.save()
+    return render(request, "news/oauth_popup_start.html")
+
+
+@login_required
+def oauth_popup_done(request: HttpRequest) -> HttpResponse:
+    """Land here after Google OAuth in a popup; close popup and navigate opener."""
+    request.session.pop("oauth_popup", None)
+    return render(
+        request,
+        "news/oauth_popup_done.html",
+        {"next_url": request.GET.get("next") or reverse("brief")},
+    )
 
 
 @login_required

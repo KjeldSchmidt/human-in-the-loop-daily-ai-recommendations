@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Signed in</title>
+</head>
+<body>
+  <p>Signed in. You can close this window.</p>
+  <p><a id="continue" href="{{ next_url }}">Continue</a></p>
+  <script>
+    (function () {
+      var next = "{{ next_url|escapejs }}";
+      // Google's COOP nulls window.opener after OAuth — tell the opener via localStorage.
+      try {
+        localStorage.setItem(
+          "oauth_popup_done",
+          JSON.stringify({ at: Date.now(), next: next })
+        );
+      } catch (e) {}
+
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.location.href = next;
+        } catch (e) {}
+      }
+      window.close();
+    })();
+  </script>
+</body>
+</html>
