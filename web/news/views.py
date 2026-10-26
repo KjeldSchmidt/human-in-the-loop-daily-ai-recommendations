@@ -24,16 +24,17 @@ def landing(request: HttpRequest) -> HttpResponse:
 
 
 def oauth_popup_start(request: HttpRequest) -> HttpResponse:
-    """Open this in the OAuth popup first (200 + session cookie), then go to Google.
+    """Establish a session in the popup, then same-origin redirect into allauth.
 
-    Opening ``/accounts/google/login/`` directly in a popup often drops the session
-    cookie on the immediate 302 → Google, which breaks state/PKCE on callback.
+    A direct window.open to Google can drop the session cookie on the first hop;
+    saving the session here then redirecting to ``google_login`` keeps state/PKCE
+    intact. Avoid a JS meta-refresh page (easy to loop when proxy HTTPS is wrong).
     """
     if request.user.is_authenticated:
         return redirect("oauth_popup_done")
     request.session["oauth_popup"] = True
     request.session.save()
-    return render(request, "news/oauth_popup_start.html")
+    return redirect("google_login")
 
 
 @login_required

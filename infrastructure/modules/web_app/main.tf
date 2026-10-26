@@ -174,7 +174,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
   name = "Managed-AllViewerExceptHostHeader"
 }
 
-# Copy viewer Host into X-Forwarded-Host so Django absolute URLs / CSRF use CloudFront.
+# So Django sees the CloudFront host + https (Function URL origin Host stays Lambda).
 resource "aws_cloudfront_function" "x_forwarded_host" {
   name    = "${local.name_prefix}-xfh"
   runtime = "cloudfront-js-2.0"
@@ -185,6 +185,7 @@ resource "aws_cloudfront_function" "x_forwarded_host" {
       if (request.headers.host) {
         request.headers["x-forwarded-host"] = { value: request.headers.host.value };
       }
+      request.headers["x-forwarded-proto"] = { value: "https" };
       return request;
     }
   EOF
@@ -214,6 +215,7 @@ resource "aws_cloudfront_distribution" "web" {
   default_cache_behavior {
     target_origin_id       = "lambda-function-url"
     viewer_protocol_policy = "redirect-to-https"
+
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
     compress               = true

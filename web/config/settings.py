@@ -58,9 +58,8 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
 ]
 
-# CloudFront viewer-request function sets X-Forwarded-Host to the CloudFront domain.
+# CloudFront viewer-request function sets X-Forwarded-Host / X-Forwarded-Proto.
 USE_X_FORWARDED_HOST = True
-
 
 ROOT_URLCONF = "config.urls"
 
@@ -169,3 +168,11 @@ LOGOUT_REDIRECT_URL = "landing"
 ACCOUNT_LOGOUT_REDIRECT_URL = "landing"
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Force https in allauth absolute URLs even if proxy headers are missing.
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = (
+    "https" if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or not DEBUG else "http"
+)
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
