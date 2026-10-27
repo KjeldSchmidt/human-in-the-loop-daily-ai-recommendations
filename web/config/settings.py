@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "config.middleware.ViewerHostMiddleware",  # before SecurityMiddleware
+    "config.middleware.NormalizeTrailingSlashMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -61,6 +62,11 @@ MIDDLEWARE = [
 
 # Set from X-Viewer-Host by ViewerHostMiddleware (CloudFront cannot set X-Forwarded-Host).
 USE_X_FORWARDED_HOST = True
+
+# Lambda Function URL / some proxies can present paths without a trailing slash while the
+# browser requested one. APPEND_SLASH then 301s to the slashed URL → infinite loop.
+# Prefer in-process rewrite (NormalizeTrailingSlashMiddleware) over HTTP redirects.
+APPEND_SLASH = False
 
 ROOT_URLCONF = "config.urls"
 

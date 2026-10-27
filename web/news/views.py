@@ -20,27 +20,14 @@ from news.services import next_questions, rank_items, recommend_feeds
 def landing(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("brief")
+    # Ensure a session cookie exists before the OAuth popup opens (same-site share).
+    request.session.setdefault("oauth_ready", True)
     return render(request, "news/landing.html")
-
-
-def oauth_popup_start(request: HttpRequest) -> HttpResponse:
-    """Establish a session in the popup, then same-origin redirect into allauth.
-
-    A direct window.open to Google can drop the session cookie on the first hop;
-    saving the session here then redirecting to ``google_login`` keeps state/PKCE
-    intact. Avoid a JS meta-refresh page (easy to loop when proxy HTTPS is wrong).
-    """
-    if request.user.is_authenticated:
-        return redirect("oauth_popup_done")
-    request.session["oauth_popup"] = True
-    request.session.save()
-    return redirect("google_login")
 
 
 @login_required
 def oauth_popup_done(request: HttpRequest) -> HttpResponse:
     """Land here after Google OAuth in a popup; close popup and navigate opener."""
-    request.session.pop("oauth_popup", None)
     return render(
         request,
         "news/oauth_popup_done.html",

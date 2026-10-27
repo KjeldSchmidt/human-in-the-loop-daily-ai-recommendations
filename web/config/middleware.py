@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
 from django.http import HttpRequest
+from django.urls import Resolver404, resolve
 
 
 class ViewerHostMiddleware:
@@ -15,10 +18,39 @@ class ViewerHostMiddleware:
 
     def __init__(self, get_response):
         self.get_response = get_response
+        self.on_lambda = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
 
     def __call__(self, request: HttpRequest):
         viewer_host = request.headers.get("X-Viewer-Host", "").strip()
         if viewer_host:
             request.META["HTTP_X_FORWARDED_HOST"] = viewer_host
+        if viewer_host or self.on_lambda:
             request.META["HTTP_X_FORWARDED_PROTO"] = "https"
+        return self.get_response(request)
+
+
+class NormalizeTrailingSlashMiddleware:
+    """Resolve URLs that need a trailing slash without issuing a redirect.
+
+    Avoids the APPEND_SLASH ↔ proxy slash-strip loop (301 Location to the same path).
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest):
+        path = request.path_info
+        if path != "/" and not path.endswith("/"):
+            try:
+                resolve(path)
+            except Resolver404:
+                try:
+                    resolve(f"{path}/")
+                except Resolver404:
+                    pass
+                else:
+                    request.path_info = f"{path}/"
+                    # Keep path in sync for get_full_path() / redirects.
+                    if not request.path.endswith("/"):
+                        request.path = f"{request.path}/"
         return self.get_response(request)

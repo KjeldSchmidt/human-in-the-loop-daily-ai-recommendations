@@ -24,6 +24,10 @@
         } catch (e) {}
       }
       window.close();
+      // Full-page login (popup blocked) or close blocked by the browser.
+      setTimeout(function () {
+        window.location.href = next;
+      }, 400);
     })();
   </script>
 </body>
