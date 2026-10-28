@@ -37,23 +37,6 @@ export AWS_PROFILE=AdministratorAccess-465836752303
 just
 ```
 
-## Deploy
-
-```bash
-just create-databases
-just upsert-google-oauth
-just apply-shared
-just name-servers          # → set NS at the registrar for signal-to-noise.fyi
-just deploy                 # or: just deploy "$GIT_SHA"
-```
-
-ACM DNS validation only works after the registrar points at those name servers (or you copy the validation CNAMEs manually). `apply-shared` waits on certificate validation.
-
-Google OAuth:
-
-- Origin: `https://beta.signal-to-noise.fyi`
-- Redirect: `https://beta.signal-to-noise.fyi/accounts/google/login/callback/`
-
 ## Layout
 
 | Path | Role |

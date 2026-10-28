@@ -25,7 +25,6 @@ lint:
     done
 
 # Shared ECR + DNS (once per account; safe to re-run)
-# After apply: just name-servers → set NS at the registrar
 apply-shared:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -66,16 +65,6 @@ deploy tag="latest" env="dev":
     DEPLOY_ENV={{env}} just push-image "{{tag}}"
     just apply-app "{{tag}}" "{{env}}"
     just setup-remote "{{env}}"
-
-# Print Route 53 name servers (delegate signal-to-noise.fyi at the registrar)
-name-servers:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    pushd env/shared >/dev/null
-    terraform init -reconfigure >/dev/null
-    echo "Delegate signal-to-noise.fyi to these name servers:"
-    terraform output -json name_servers | python3 -c 'import json,sys; [print(f"  {ns}") for ns in json.load(sys.stdin)]'
-    popd >/dev/null
 
 outputs env="dev":
     #!/usr/bin/env bash

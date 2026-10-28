@@ -57,13 +57,6 @@ DATABASE_SSL=true
 
 See [`../infrastructure/README.md`](../infrastructure/README.md).
 
-Summary:
-
-1. `cd infrastructure && just create-databases`
-2. `just upsert-google-oauth` (once)
-3. `just deploy` — base (ECR) → push image → app (Lambda + CloudFront) → migrate/seed
-4. Point Google OAuth at `https://beta.signal-to-noise.fyi` (and set registrar NS from `just name-servers`)
-
 ### Caveats
 
 - Seeded articles are demo content until real RSS ingestion lands.
