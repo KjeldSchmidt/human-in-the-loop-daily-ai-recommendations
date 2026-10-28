@@ -15,6 +15,9 @@ SECRET_KEY = os.environ.get(
     "django-insecure-dev-only-change-me-in-production",
 )
 
+# Shared bearer token for /api/internal/* (Lambdas). Empty disables those routes (503).
+INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
+
 DEBUG = os.environ.get("DEBUG", "true").lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = [

@@ -2,7 +2,9 @@
 
 Django frontend for the personal news aggregator MVP. Placeholder ranking and follow-up questions — the LangGraph core in `../runner` is intentionally untouched.
 
-Auth is **Google-only** (django-allauth). Django still has a `User` row per person; passwords are not used for end users.
+Auth is **Google-only** (django-allauth) for humans. Django still has a `User` row per person; passwords are not used for end users.
+
+Machine callers (Lambdas) use a shared bearer token (`INTERNAL_API_TOKEN`) against `/api/internal/*`. On AWS the token is generated in Terraform and stored in the app Secrets Manager secret; locally set it in `.env`.
 
 ## Google OAuth setup (where to put credentials)
 

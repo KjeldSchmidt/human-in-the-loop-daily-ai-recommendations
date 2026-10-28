@@ -84,6 +84,10 @@ output "app_secret_name" {
   value = module.web.app_secret_name
 }
 
+output "app_secret_arn" {
+  value = module.web.app_secret_arn
+}
+
 output "google_oauth_secret_name" {
   value = module.web.google_oauth_secret_name
 }

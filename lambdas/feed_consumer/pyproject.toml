@@ -1,0 +1,10 @@
+[project]
+name = "feed_consumer"
+version = "0.1.0"
+description = "noise-to-signal news aggregator RSS feed parser/consumer"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "feedparser>=6.0.14",
+    "python-dotenv>=1.2.4",
+]

@@ -24,6 +24,11 @@ output "app_secret_name" {
   value = aws_secretsmanager_secret.app.name
 }
 
+output "app_secret_arn" {
+  description = "Shared app secret (SECRET_KEY, DATABASE_URL, INTERNAL_API_TOKEN) for web + worker Lambdas"
+  value       = aws_secretsmanager_secret.app.arn
+}
+
 output "google_oauth_secret_name" {
   value = data.aws_secretsmanager_secret.google_oauth.name
 }

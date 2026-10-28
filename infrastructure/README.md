@@ -25,6 +25,10 @@ CREATE DATABASE noise_to_signal_dev;
 CREATE DATABASE noise_to_signal_prod;
 ```
 
+## Internal API token
+
+Terraform generates `INTERNAL_API_TOKEN` into the per-env app secret (`noise-to-signal/<env>/app`) and injects it into the web Lambda. Worker Lambdas should `GetSecretValue` on that same secret (ARN is output as `app_secret_arn`) and call `https://<public-host>/api/internal/...` with `Authorization: Bearer <token>`.
+
 ## Prerequisites
 
 - WSL + AWS SSO: `AWS_PROFILE=AdministratorAccess-465836752303`

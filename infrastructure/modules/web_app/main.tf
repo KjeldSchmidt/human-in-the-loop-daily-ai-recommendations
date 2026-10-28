@@ -55,6 +55,11 @@ resource "random_password" "django_secret" {
   special = false
 }
 
+resource "random_password" "internal_api_token" {
+  length  = 64
+  special = false
+}
+
 data "aws_secretsmanager_secret" "google_oauth" {
   name = local.google_oauth_secret_name
 }
@@ -65,7 +70,7 @@ data "aws_secretsmanager_secret_version" "google_oauth" {
 
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${var.project}/${var.environment}/app"
-  description             = "noise-to-signal Lambda runtime secrets (SECRET_KEY, DATABASE_URL)"
+  description             = "noise-to-signal Lambda runtime secrets (SECRET_KEY, DATABASE_URL, INTERNAL_API_TOKEN)"
   recovery_window_in_days = 0
   tags                    = local.tags
 }
@@ -73,8 +78,9 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    SECRET_KEY   = random_password.django_secret.result
-    DATABASE_URL = local.database_url
+    SECRET_KEY         = random_password.django_secret.result
+    DATABASE_URL       = local.database_url
+    INTERNAL_API_TOKEN = random_password.internal_api_token.result
   })
 }
 
@@ -145,6 +151,7 @@ resource "aws_lambda_function" "web" {
       SITE_DOMAIN          = var.public_hostname
       SECRET_KEY           = local.app_secret.SECRET_KEY
       DATABASE_URL         = local.app_secret.DATABASE_URL
+      INTERNAL_API_TOKEN   = local.app_secret.INTERNAL_API_TOKEN
       GOOGLE_CLIENT_ID     = local.google_oauth.GOOGLE_CLIENT_ID
       GOOGLE_CLIENT_SECRET = local.google_oauth.GOOGLE_CLIENT_SECRET
     }
